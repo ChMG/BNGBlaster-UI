@@ -157,12 +157,6 @@ curl -H "X-Bngblaster-Target: 1" \
 
 Tip: `GET /ui-api/backend-info` returns `backend_urls` and helps map index → URL.
 
-Development mode with live reload (bind-mount source):
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
-```
-
 Optionally with custom port or backend URL:
 
 ```bash

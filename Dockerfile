@@ -8,7 +8,12 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Copy only runtime-relevant files
+COPY server.py gunicorn.conf.py ./
+COPY static/ ./static/
+
+# config-templates/ and state/ are mounted as volumes at runtime
+RUN mkdir -p config-templates state
 
 EXPOSE 8080
 

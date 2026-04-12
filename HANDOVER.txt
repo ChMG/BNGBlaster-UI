@@ -97,7 +97,6 @@ G) Multi-backend support
 H) Docker support
 - Dockerfile: python:3.12-slim, installs requirements.txt, exposes 8080.
 - docker-compose.yml: service bngblaster-ui, healthcheck via Python urllib, volume config-templates.
-- docker-compose.dev.yml: override with gunicorn --reload, full source bind-mount, debug loglevel.
 - .dockerignore added.
 - docker-compose.yml now also mounts ./state:/app/state for persisted runtime state.
 
@@ -150,7 +149,6 @@ K) Stop-apply-restart workflow for running instances
   - BNGBLASTER_URL=http://bng1:8001,http://bng2:8001 python3 server.py
 - Docker:
   - docker compose up --build -d
-  - docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build  (dev/live-reload)
 - VS Code:
   - Use launch configs in .vscode/launch.json
 
