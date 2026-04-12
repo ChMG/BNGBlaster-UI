@@ -1,0 +1,43 @@
+services:
+  bngblaster-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bngblaster-ui
+    ports:
+      - "8080:8080"
+    environment:
+      # Change if your BNG Blaster Controller runs elsewhere
+      BNGBLASTER_URL: ${BNGBLASTER_URL:-http://host.docker.internal:8001}
+      BIND: 0.0.0.0:8080
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+      GUNICORN_THREADS: ${GUNICORN_THREADS:-2}
+      GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-30}
+      GUNICORN_LOGLEVEL: ${GUNICORN_LOGLEVEL:-info}
+      VERSION_CHECK_ENABLED: ${VERSION_CHECK_ENABLED:-1}
+      VERSION_CHECK_CACHE_SEC: ${VERSION_CHECK_CACHE_SEC:-3600}
+      START_OPTIONS_CLEANUP_ENABLED: ${START_OPTIONS_CLEANUP_ENABLED:-1}
+      START_OPTIONS_CLEANUP_INTERVAL_SEC: ${START_OPTIONS_CLEANUP_INTERVAL_SEC:-300}
+    # Linux compatibility for host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./config-templates:/app/config-templates
+      - ./state:/app/state
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request
+          try:
+              r = urllib.request.urlopen('http://127.0.0.1:8080/', timeout=3)
+              sys.exit(0 if 200 <= r.status < 500 else 1)
+          except Exception:
+              sys.exit(1)
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped

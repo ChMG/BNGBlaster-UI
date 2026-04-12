@@ -1,0 +1,330 @@
+openapi: 3.0.3
+info:
+  title: BNG Blaster UI API
+  version: 1.0.0
+  description: >-
+    Internal UI API for template management, backend metadata, and persisted
+    instance start options.
+servers:
+  - url: /
+tags:
+  - name: templates
+  - name: backend
+  - name: start-options
+
+paths:
+  /ui-api/templates:
+    get:
+      tags: [templates]
+      summary: List saved templates
+      responses:
+        '200':
+          description: Template list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TemplateListItem'
+
+  /ui-api/templates/{name}:
+    parameters:
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+        description: Template name (a-z, A-Z, 0-9, _, -)
+    get:
+      tags: [templates]
+      summary: Get template JSON
+      responses:
+        '200':
+          description: Template content
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+    put:
+      tags: [templates]
+      summary: Create or update template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkObject'
+        '400':
+          description: Invalid JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+    delete:
+      tags: [templates]
+      summary: Delete template
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkObject'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+
+  /ui-api/backend-info:
+    get:
+      tags: [backend]
+      summary: Get active backend configuration
+      responses:
+        '200':
+          description: Backend metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackendInfo'
+
+  /ui-api/instance-start-options/{name}:
+    parameters:
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+        description: Instance name
+      - in: header
+        name: X-Bngblaster-Target
+        required: false
+        schema:
+          type: string
+        description: >-
+          Selected backend target URL (or numeric index) used to namespace
+          stored data in multi-backend mode.
+    get:
+      tags: [start-options]
+      summary: Get saved start options for an instance
+      responses:
+        '200':
+          description: Start options object (or empty object)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartOptions'
+    put:
+      tags: [start-options]
+      summary: Save start options for an instance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartOptions'
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkObject'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+    delete:
+      tags: [start-options]
+      summary: Delete saved start options for an instance
+      responses:
+        '200':
+          description: Deleted (idempotent)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkObject'
+
+  /ui-api/instance-start-options/_cleanup:
+    post:
+      tags: [start-options]
+      summary: Trigger manual orphan cleanup
+      description: >-
+        Runs one cleanup pass and removes saved entries for instances that no
+        longer exist on reachable backend targets.
+      responses:
+        '200':
+          description: Cleanup result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CleanupResult'
+
+  /ui-api/instances/{name}/reconfigure:
+    put:
+      tags: [start-options]
+      summary: Stop, apply config, and restart instance
+      description: >-
+        Stops the instance if running, applies the provided config via backend
+        PUT, then starts it again using saved start options for the selected
+        backend target (or empty object if none are stored).
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+          description: Instance name
+        - in: header
+          name: X-Bngblaster-Target
+          required: false
+          schema:
+            type: string
+          description: Selected backend target URL (or numeric index).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Reconfigure completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  used_start_options:
+                    $ref: '#/components/schemas/StartOptions'
+                required: [ok, used_start_options]
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+        '502':
+          description: Backend unreachable or status unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+        '504':
+          description: Timeout waiting for stop/start transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+
+components:
+  schemas:
+    TemplateListItem:
+      type: object
+      properties:
+        name:
+          type: string
+        preview:
+          type: string
+      required: [name, preview]
+
+    BackendInfo:
+      type: object
+      properties:
+        backend_url:
+          type: string
+        backend_urls:
+          type: array
+          items:
+            type: string
+        multi_backend:
+          type: boolean
+        version_check_enabled:
+          type: boolean
+        version_status:
+          type: object
+          properties:
+            controller:
+              $ref: '#/components/schemas/VersionStatusEntry'
+            blaster:
+              $ref: '#/components/schemas/VersionStatusEntry'
+      required: [backend_url, backend_urls, multi_backend, version_check_enabled]
+
+    VersionStatusEntry:
+      type: object
+      properties:
+        current:
+          type: string
+          nullable: true
+        latest:
+          type: string
+          nullable: true
+        up_to_date:
+          type: boolean
+          nullable: true
+        release_url:
+          type: string
+      required: [release_url]
+
+    StartOptions:
+      type: object
+      additionalProperties: false
+      properties:
+        logging:
+          type: boolean
+        logging_flags:
+          type: array
+          items:
+            type: string
+        report:
+          type: boolean
+        pcap:
+          type: boolean
+        session_count:
+          type: integer
+          minimum: 1
+
+    OkObject:
+      type: object
+      properties:
+        ok:
+          type: boolean
+      required: [ok]
+
+    CleanupResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        removed:
+          type: integer
+          minimum: 0
+      required: [ok, removed]
+
+    ErrorObject:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]

@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Flask UI (server.py)",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/server.py",
+      "args": [
+        "8080"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "BNGBLASTER_URL": "http://localhost:8001,http://127.0.0.1:8001"
+      }
+    },
+    {
+      "name": "Python: Gunicorn (single worker)",
+      "type": "python",
+      "request": "launch",
+      "module": "gunicorn",
+      "args": [
+        "-w",
+        "1",
+        "-c",
+        "${workspaceFolder}/gunicorn.conf.py",
+        "server:app"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "BNGBLASTER_URL": "http://localhost:8001",
+        "BIND": "0.0.0.0:8080"
+      }
+    }
+  ]
+}

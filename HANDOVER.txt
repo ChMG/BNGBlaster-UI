@@ -1,0 +1,185 @@
+BNG BLASTER UI - HANDOVER
+Last updated: 2026-04-12
+
+1) CURRENT STACK
+- Backend: Flask proxy/app in server.py
+- Production-style runtime: Gunicorn (gunicorn.conf.py)
+- Frontend: Vue 3 SPA served from static/
+- Main SPA entry: static/index.html + static/js/app.js
+- API helper: static/js/api.js
+
+2) IMPORTANT PROJECT STRUCTURE
+- server.py
+  - Proxies /api/* and /metrics to BNG Blaster backend
+  - Provides template CRUD API under /ui-api/templates
+  - Serves static SPA from static/
+- static/js/pages/instances.js
+  - Most complex file; contains instance lifecycle + sessions UI/logic
+  - Includes start-options modal, session table, session detail modal, session edit modal, polling
+- static/js/pages/interfaces.js
+- static/js/pages/metrics.js
+- static/js/pages/templates.js
+- static/js/pages/explorer.js
+- static/bngblaster-controler-swagger.yaml
+- static/ui-api-swagger.yaml
+- config-templates/ (server-side template JSON storage)
+
+3) MAJOR CHANGES COMPLETED IN THIS CHAT
+A) Internationalization / cleanup
+- UI texts and runtime messages translated to English in active SPA files.
+- Legacy root app removed (old root index/app/styles/proxy, duplicate swagger).
+- README updated and aligned with current architecture.
+
+B) Runtime and tooling
+- Gunicorn support added:
+  - requirements.txt includes gunicorn
+  - gunicorn.conf.py added
+- VS Code debug config added in .vscode/launch.json:
+  - Flask UI launch
+  - Gunicorn single-worker launch
+- .gitignore added and tuned for Python/venv/editor artifacts.
+
+C) Instances + Sessions enhancements
+- Session table and controls heavily improved.
+- Session detail moved to dedicated popup with explicit session-info fetch.
+- Session edit modal now supports only session-update with dedicated fields:
+  - session-id (mandatory, implicit)
+  - username, password, agent-remote-id, agent-circuit-id, ipv6-link-local
+  - Empty fields are not sent.
+- Session row actions:
+  - Start/Stop based on session state
+  - Restart
+  - Edit
+  - Detail
+
+D) Start instance options
+- Start now opens modal (from table and detail popup) with options:
+  - Enable logging
+  - Enable report
+  - Enable PCAP
+  - Logging flags (shown only if logging enabled)
+  - Optional session count
+- Request building behavior:
+  - logging only if enabled
+  - logging_flags only when logging enabled and at least one flag selected
+  - report only if enabled
+  - pcap only if enabled
+  - session_count only if provided and valid positive integer
+
+E) Logging flags list aligned to docs
+- Flags now exactly:
+  debug, info, error, igmp, io, pppoe, pcap, ip, loss,
+  l2tp, dhcp, isis, bgp, tcp, lag, dpdk, packet, http, icmp
+- Descriptions are attached and shown via tooltip.
+
+F) Instance status/session refresh reliability fixes
+- After start/stop/kill, instance status now settles via short repeated status checks.
+- Auto polling stop behavior fixed in instances/interfaces/metrics pages.
+- Sessions refresh now depends on instance status:
+  - If instance is stopped, normal session refresh is paused.
+  - Added drain-on-stop behavior: after stop/kill, session list is still refreshed briefly until list reaches 0 (or max attempts), then polling stops.
+
+G) Multi-backend support
+- BNGBLASTER_URL accepts a comma-separated list of backend URLs.
+- server.py parses list into BACKEND_URLS; default target is BACKEND_URLS[0].
+- Per-request routing: X-Bngblaster-Target header selects backend.
+- Header supports full URL (recommended) or 0-based index string.
+- Outbound targets are strictly allowlisted to BACKEND_URLS (HTTP/HTTPS only, no credentials).
+- Invalid X-Bngblaster-Target now returns HTTP 400 instead of falling back silently.
+- /ui-api/backend-info returns backend_url, backend_urls, multi_backend.
+- api.js injects X-Bngblaster-Target from localStorage into every fetch.
+- app.js shows a Server Selection dropdown (only when multi-backend mode active).
+- Selected backend is persisted in localStorage under key 'bngblaster-target'.
+- Backend labels show extracted hostname (e.g. bng1 from http://bng1:8001).
+- Server Selection box is positioned between the brand header and navigation links.
+- API Explorer now supports switching between Controller API and UI API specs.
+
+H) Docker support
+- Dockerfile: python:3.12-slim, installs requirements.txt, exposes 8080.
+- docker-compose.yml: service bngblaster-ui, healthcheck via Python urllib, volume config-templates.
+- docker-compose.dev.yml: override with gunicorn --reload, full source bind-mount, debug loglevel.
+- .dockerignore added.
+- docker-compose.yml now also mounts ./state:/app/state for persisted runtime state.
+
+I) Backend status sidebar improvements
+- Full backend URL shown without truncation (break-all).
+- Both ctrl (bngblasterctrl-version) and blaster (bngblaster-version) shown.
+- 'proxied to' line shown only when backend target differs from current origin.
+- Optional version check compares against latest GitHub releases and colors versions (green current / red outdated).
+- Env controls: VERSION_CHECK_ENABLED, VERSION_CHECK_CACHE_SEC.
+
+J) Template interface variable substitution
+- Templates can contain $IF1, $IF2, ... placeholders for interface names.
+- When applying a template: system detects $IF vars → dialog shows searchable interface selector for each variable.
+- Each variable can appear multiple times; all occurrences replaced with selected interface name.
+- Supported both in templates page and instance edit popup.
+
+K) Stop-apply-restart workflow for running instances
+- When editing a running instance, save triggers HTTP 412 (Precondition Failed).
+- Dialog asks: "Stop, apply config, and restart?"
+- "Yes" → stop → PUT config → start → running again with new config.
+- Restart uses the last start options used for that instance (stored server-side via /ui-api/instance-start-options/<name>).
+- Manual start dialog also pre-fills from the same server-side stored options.
+- "No" → dialog closes, error displayed.
+- Stored start options are persisted on disk in state/instance-start-options.json.
+- Deleting an instance also removes its stored start options entry.
+- In multi-backend mode, stored start options are keyed by backend target + instance name to avoid collisions.
+- Periodic cleanup job removes orphaned entries for instances deleted outside the UI.
+- Cleanup control env vars: START_OPTIONS_CLEANUP_ENABLED, START_OPTIONS_CLEANUP_INTERVAL_SEC.
+- Manual cleanup endpoint: POST /ui-api/instance-start-options/_cleanup
+- Server-side reconfigure endpoint: PUT /ui-api/instances/<name>/reconfigure
+  - Stops instance (if running), applies config, then starts with saved start params.
+
+4) FILES MOST LIKELY TO TOUCH NEXT
+- static/js/pages/instances.js (primary)
+- server.py (if backend proxy/template API behavior changes)
+- README.md (if run/debug instructions change)
+
+5) KNOWN BEHAVIOR / DESIGN DECISIONS
+- Backend start endpoint requires non-empty JSON body; start uses {} if no options selected.
+- Session commands rely on session-id argument.
+- Session list discovery prefers session-summary and has fallbacks.
+- Session refresh is intentionally suppressed while instance is not started, except stop-drain phase.
+
+6) QUICK RUN / DEBUG
+- Dev:
+  - python3 server.py
+- Gunicorn:
+  - BNGBLASTER_URL=http://localhost:8001 gunicorn -c gunicorn.conf.py server:app
+- Multi-backend:
+  - BNGBLASTER_URL=http://bng1:8001,http://bng2:8001 python3 server.py
+- Docker:
+  - docker compose up --build -d
+  - docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build  (dev/live-reload)
+- VS Code:
+  - Use launch configs in .vscode/launch.json
+
+7) LOCAL DEV ON WINDOWS (WSL)
+- Recommended local environment: WSL2 with Ubuntu 24.04.
+- Install references:
+  - BNG Blaster: https://rtbrick.github.io/bngblaster/install.html
+  - BNG Blaster Controller: https://rtbrick.github.io/bngblaster/controller.html#installation
+- Example virtual interface setup in WSL (bridge + veth):
+  - sudo ip link add br0 type bridge
+  - sudo ip link set br0 up
+  - sudo ip link add vethA type veth peer name vethA-peer
+  - sudo ip link add vethB type veth peer name vethB-peer
+  - sudo ip link set vethA-peer master br0
+  - sudo ip link set vethB-peer master br0
+  - sudo ip link set vethA up
+  - sudo ip link set vethA-peer up
+  - sudo ip link set vethB up
+  - sudo ip link set vethB-peer up
+  - sudo sysctl -w net.ipv6.conf.br0.disable_ipv6=1
+  - sudo sysctl -w net.ipv6.conf.vethA.disable_ipv6=1
+  - sudo sysctl -w net.ipv6.conf.vethA-peer.disable_ipv6=1
+  - sudo sysctl -w net.ipv6.conf.vethB.disable_ipv6=1
+  - sudo sysctl -w net.ipv6.conf.vethB-peer.disable_ipv6=1
+  - Check interfaces with: ip link show
+
+8) SUGGESTED NEXT CHECKS FOR CONTINUATION
+- Manually verify stop-drain behavior with real backend timing edge cases.
+- Verify start-options payload against backend acceptance for report/logging/session_count combinations.
+- Optional UX enhancements:
+  - logging flag select-all/clear-all
+  - persist last-used start options per browser session

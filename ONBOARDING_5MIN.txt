@@ -1,0 +1,75 @@
+BNG BLASTER UI - 5 MIN ONBOARDING
+
+1) Setup
+- cd /home/ch-mg/code/bngblaster-ui
+- source .venv/bin/activate
+- pip install -r requirements.txt
+
+2) Run app
+- Dev: python3 server.py
+- Production-like: BNGBLASTER_URL=http://localhost:8001 gunicorn -c gunicorn.conf.py server:app
+- Multi-backend: BNGBLASTER_URL=http://bng1:8001,http://bng2:8001 python3 server.py
+- Docker: docker compose up --build -d
+- Docker dev (live reload): docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+- Open: http://localhost:8080
+
+3) Debug in VS Code
+- Use .vscode/launch.json
+- Start "Python: Flask UI (server.py)" for normal debugging
+- Start "Python: Gunicorn (single worker)" for production-like behavior
+
+4) Where to work
+- Main backend/proxy: server.py
+- Main frontend app shell/router: static/index.html, static/js/app.js
+- Shared API helper: static/js/api.js
+- Most feature work happens in: static/js/pages/instances.js
+
+5) Current key behavior to know
+- Instance Start opens options modal (logging/report/pcap/logging_flags/session_count)
+- Session refresh pauses when instance is stopped
+- After stop/kill, sessions are drained (refreshed until empty) before polling stops
+- Session edit supports only session-update fields
+- Multi-backend: sidebar shows Server Selection dropdown above navigation (only when >1 URL configured)
+- Selected backend stored in localStorage; all API calls routed via X-Bngblaster-Target header
+- X-Bngblaster-Target can be backend URL or 0-based index (from backend_urls)
+- Invalid X-Bngblaster-Target is rejected with HTTP 400; proxy only forwards to configured BACKEND_URLS
+- Template variables: $IF1, $IF2, ... in templates are replaced with selected interfaces (searchable dialog)
+- Running instance edit: save triggers stop → apply → restart workflow with confirmation needed
+- Restart-after-edit reuses last start options per instance from server-side storage (if available)
+- Manual start modal pre-fills saved start options per instance
+- Deleting an instance removes its saved start options from server state
+- In multi-backend mode, saved start options are backend-specific (no cross-server name collision)
+- Periodic server cleanup removes orphaned saved start options (instances deleted outside the UI)
+- Manual cleanup trigger available: POST /ui-api/instance-start-options/_cleanup
+- Reconfigure API available: PUT /ui-api/instances/{name}/reconfigure (stop/apply/restart)
+- Optional version check colors sidebar versions (green current, red outdated)
+
+6) Important data/config paths
+- Templates storage: config-templates/
+- Runtime state storage: state/ (includes instance-start-options.json)
+- OpenAPI spec used by explorer: static/bngblaster-controler-swagger.yaml
+- UI API OpenAPI spec: static/ui-api-swagger.yaml
+- Full project handover: HANDOVER.txt
+- Explorer page can switch between both specs via API Source selector.
+
+7) WSL local dev (Windows)
+- Use WSL2 with Ubuntu 24.04.
+- Install docs:
+	- BNG Blaster: https://rtbrick.github.io/bngblaster/install.html
+	- BNG Blaster Controller: https://rtbrick.github.io/bngblaster/controller.html#installation
+- Create virtual interfaces for tests (inside WSL), then verify with: ip link show
+	- sudo ip link add br0 type bridge
+	- sudo ip link set br0 up
+	- sudo ip link add vethA type veth peer name vethA-peer
+	- sudo ip link add vethB type veth peer name vethB-peer
+	- sudo ip link set vethA-peer master br0
+	- sudo ip link set vethB-peer master br0
+	- sudo ip link set vethA up
+	- sudo ip link set vethA-peer up
+	- sudo ip link set vethB up
+	- sudo ip link set vethB-peer up
+	- sudo sysctl -w net.ipv6.conf.br0.disable_ipv6=1
+	- sudo sysctl -w net.ipv6.conf.vethA.disable_ipv6=1
+	- sudo sysctl -w net.ipv6.conf.vethA-peer.disable_ipv6=1
+	- sudo sysctl -w net.ipv6.conf.vethB.disable_ipv6=1
+	- sudo sysctl -w net.ipv6.conf.vethB-peer.disable_ipv6=1
