@@ -57,6 +57,15 @@ def _is_allowed_backend_url(url: str) -> bool:
     return True
 
 
+def _load_app_version(base_dir: pathlib.Path) -> str:
+    version_file = base_dir / "VERSION"
+    try:
+        value = version_file.read_text(encoding="utf-8").strip()
+        return value or "dev"
+    except OSError:
+        return "dev"
+
+
 BACKEND_URLS = _parse_backend_urls(os.environ.get("BNGBLASTER_URL", "http://localhost:8001"))
 BACKEND_URL = BACKEND_URLS[0]
 BASE_DIR = pathlib.Path(__file__).parent
@@ -71,6 +80,7 @@ START_OPTIONS_CLEANUP_ENABLED = os.environ.get("START_OPTIONS_CLEANUP_ENABLED", 
 START_OPTIONS_CLEANUP_INTERVAL_SEC = max(30, int(os.environ.get("START_OPTIONS_CLEANUP_INTERVAL_SEC", "300")))
 VERSION_CHECK_ENABLED = os.environ.get("VERSION_CHECK_ENABLED", "1") not in {"0", "false", "False", "no", "NO"}
 VERSION_CHECK_CACHE_SEC = max(60, int(os.environ.get("VERSION_CHECK_CACHE_SEC", "3600")))
+APP_VERSION = _load_app_version(BASE_DIR)
 
 _HOP_BY_HOP = frozenset(
     {"connection", "keep-alive", "transfer-encoding", "te",
@@ -423,6 +433,7 @@ def backend_info():
         "backend_urls": BACKEND_URLS,
         "multi_backend": len(BACKEND_URLS) > 1,
         "version_check_enabled": VERSION_CHECK_ENABLED,
+        "app_version": APP_VERSION,
     }
 
     if VERSION_CHECK_ENABLED:

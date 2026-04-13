@@ -9,7 +9,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy only runtime-relevant files
-COPY server.py gunicorn.conf.py ./
+COPY server.py gunicorn.conf.py VERSION ./
 COPY static/ ./static/
 
 # config-templates/ and state/ are mounted as volumes at runtime

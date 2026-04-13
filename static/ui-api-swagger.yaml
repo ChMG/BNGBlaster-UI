@@ -252,6 +252,8 @@ components:
     BackendInfo:
       type: object
       properties:
+        app_version:
+          type: string
         backend_url:
           type: string
         backend_urls:
@@ -269,7 +271,7 @@ components:
               $ref: '#/components/schemas/VersionStatusEntry'
             blaster:
               $ref: '#/components/schemas/VersionStatusEntry'
-      required: [backend_url, backend_urls, multi_backend, version_check_enabled]
+          required: [app_version, backend_url, backend_urls, multi_backend, version_check_enabled]
 
     VersionStatusEntry:
       type: object

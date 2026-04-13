@@ -175,6 +175,8 @@ Gunicorn runtime options can be customized via environment variables:
 - `START_OPTIONS_CLEANUP_ENABLED` (default: `1`)
 - `START_OPTIONS_CLEANUP_INTERVAL_SEC` (default: `300`, minimum: `30`)
 
+Application version is read from the `VERSION` file in project root (shown in sidebar Backend section).
+
 Then open in the browser:
 
 ```text

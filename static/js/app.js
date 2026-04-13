@@ -85,6 +85,10 @@ const AppLayout = {
         <div class="p-3 border-t border-base-300 space-y-1">
           <div class="text-11 text-base-content/40 uppercase tracking-widest">Backend</div>
           <div class="text-xs mono text-base-content/50 break-all">{{ backendUrl }}</div>
+          <div class="text-10 text-base-content/30 mono break-all">
+            <span>app:</span>
+            <span class="text-base-content/50">{{ appVersion }}</span>
+          </div>
           <div v-if="isProxied" class="text-10 text-base-content/30 mono break-all">proxied to {{ backendTarget }}</div>
           <div class="flex items-center gap-1.5">
             <span :class="online ? 'bg-success' : 'bg-error'"
@@ -116,6 +120,7 @@ const AppLayout = {
   setup() {
     const route      = useRoute();
     const online     = ref(false);
+    const appVersion = ref("—");
     const ctrlVersion = ref("…");
     const blasterVersion = ref("…");
     const ctrlLatest = ref("");
@@ -139,6 +144,7 @@ const AppLayout = {
     async function checkBackend() {
       try {
         const info = await api.get("/ui-api/backend-info");
+        appVersion.value = info?.app_version || "—";
         versionCheckEnabled.value = !!info?.version_check_enabled;
         const urls = Array.isArray(info?.backend_urls) ? info.backend_urls : [];
         backendOptions.value = urls;
@@ -173,6 +179,7 @@ const AppLayout = {
         backendTarget.value = selectedBackend.value || info?.backend_url || "—";
       } catch {
         online.value = false;
+        appVersion.value = "—";
         ctrlVersion.value = "—";
         blasterVersion.value = "—";
         ctrlLatest.value = "";
@@ -219,6 +226,7 @@ const AppLayout = {
 
     return {
       nav, online, ctrlVersion, blasterVersion,
+      appVersion,
       ctrlLatest, blasterLatest,
       backendUrl, backendTarget, backendOptions, selectedBackend,
       isMultiBackend, isProxied, currentPath, onBackendChange, backendOptionLabel,
