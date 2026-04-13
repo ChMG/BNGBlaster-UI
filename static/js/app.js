@@ -44,8 +44,9 @@ const AppLayout = {
         <!-- Brand -->
         <div class="p-4 border-b border-base-300">
           <div class="flex items-center gap-2.5">
-            <div class="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm brand-button-text"
-              style="background:var(--brand)">BB</div>
+            <div class="w-14 h-14 rounded-lg overflow-hidden border border-base-300 bg-base-300 flex items-center justify-center">
+              <img src="/favicon.svg" alt="BNG Blaster UI" class="w-14 h-14 object-contain" />
+            </div>
             <div>
               <div class="font-bold text-sm text-base-content leading-tight">BNG Blaster</div>
               <div class="text-11 text-base-content/40">Controller UI</div>
