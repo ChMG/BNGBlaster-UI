@@ -50,7 +50,7 @@ export default {
       <div v-for="m in keyMetrics" :key="m.name"
         class="bg-base-200 rounded-xl p-4 border border-base-300 hover:border-brand-soft transition-colors">
         <div class="text-xs text-base-content/40 mono truncate mb-1" :title="m.name">{{ m.name }}</div>
-        <div class="text-2xl font-bold text-base-content">{{ fmtValue(m.value) }}</div>
+        <div class="text-2xl font-bold text-base-content">{{ formatMetricValue(m) }}</div>
         <div v-if="m.help" class="text-xs text-base-content/40 mt-1 truncate" :title="m.help">{{ m.help }}</div>
       </div>
     </div>
@@ -100,7 +100,7 @@ export default {
                   <span v-for="(v, k) in m.labels" :key="k"
                     class="badge badge-ghost badge-xs mono mr-1">{{ k }}={{ v }}</span>
                 </td>
-                <td class="text-right mono font-semibold brand-text text-xs">{{ fmtValue(m.value) }}</td>
+                <td class="text-right mono font-semibold brand-text text-xs">{{ formatMetricValue(m) }}</td>
                 <td>
                   <span class="badge badge-outline badge-xs mono">{{ m.type }}</span>
                 </td>
@@ -137,7 +137,7 @@ export default {
               <span v-for="(v, k) in m.labels" :key="k"
                 class="badge badge-ghost badge-sm mono mr-1">{{ k }}={{ v }}</span>
             </td>
-            <td class="text-right mono font-semibold brand-text">{{ fmtValue(m.value) }}</td>
+            <td class="text-right mono font-semibold brand-text">{{ formatMetricValue(m) }}</td>
             <td class="hidden md:table-cell">
               <span class="badge badge-outline badge-xs mono">{{ m.type }}</span>
             </td>
@@ -242,6 +242,24 @@ export default {
       return Number.isInteger(v) ? String(v) : v.toFixed(4);
     }
 
+    function formatMetricValue(m) {
+      const formatted = fmtValue(m.value);
+      const type = m.type || "untyped";
+      
+      // Add context suffix based on metric type and labels
+      let suffix = "";
+      if (type === "counter") {
+        suffix = " (total)";
+      } else if (type === "histogram" && m.labels) {
+        if (m.labels.le) suffix = ` [le=${m.labels.le}]`;
+        else if (m.labels.bucket) suffix = ` [bucket]`;
+      } else if (type === "summary" && m.labels) {
+        if (m.labels.quantile) suffix = ` [q=${m.labels.quantile}]`;
+      }
+      
+      return formatted + suffix;
+    }
+
     function toggleGroup(groupId) {
       if (expandedGroups.value.has(groupId)) {
         expandedGroups.value.delete(groupId);
@@ -259,13 +277,16 @@ export default {
         const text = await api.get("/metrics");
         metrics.value = parsePrometheus(typeof text === "string" ? text : "");
         lastUpdated.value = new Date().toLocaleTimeString("en-US");
-        // Keep all groups collapsed by default
-        expandedGroups.value = new Set();
       } catch (e) {
         error.value = `Failed to load metrics: ${e.message}`;
       } finally {
         loading.value = false;
       }
+    }
+
+    function resetGroups() {
+      // Only called on initial load, not on auto-refresh
+      expandedGroups.value = new Set();
     }
 
     const { restart, stop } = usePoller(load, () => intervalSec.value);
@@ -277,13 +298,14 @@ export default {
 
     onMounted(async () => {
       await load();
+      resetGroups(); // Close all groups on initial load only
       restart();
     });
 
     return {
       metrics, loading, error, lastUpdated, filter, autoOn, intervalSec, viewMode,
       expandedGroups, keyMetrics, filteredMetrics, groupedMetrics, filteredGroups,
-      fmtValue, load, onAutoChange, toggleGroup,
+      fmtValue, formatMetricValue, load, onAutoChange, toggleGroup,
     };
   },
 };
