@@ -142,9 +142,9 @@ export default {
             </td>
             <td>
               <div class="flex flex-wrap gap-1">
-                <button class="btn btn-xs btn-success"  @click="openStartOptions(inst)"  :disabled="inst.busy">▶ Start</button>
-                <button class="btn btn-xs btn-warning"  @click="action(inst,'stop')"   :disabled="inst.busy">⏹ Stop</button>
-                <button class="btn btn-xs btn-error"    @click="action(inst,'kill')"   :disabled="inst.busy">⚡ Kill</button>
+                <button class="btn btn-xs btn-success"  @click="openStartOptions(inst)"  :disabled="inst.busy || isStartedLike(inst.status)">▶ Start</button>
+                <button class="btn btn-xs btn-warning"  @click="action(inst,'stop')"   :disabled="inst.busy || !isStartedLike(inst.status)">⏹ Stop</button>
+                <button class="btn btn-xs btn-error"    @click="action(inst,'kill')"   :disabled="inst.busy || !isStartedLike(inst.status)">⚡ Kill</button>
                 <button class="btn btn-xs btn-ghost"    @click="openEdit(inst)"        :disabled="inst.busy">✏ Edit</button>
                 <button class="btn btn-xs btn-ghost text-error" @click="deleteInst(inst)" :disabled="inst.busy">🗑</button>
               </div>
@@ -364,9 +364,9 @@ export default {
 
         <div class="space-y-3">
           <div class="flex flex-wrap gap-2">
-            <button class="btn btn-sm btn-success"  @click="openStartOptions(detailInst)">▶ Start</button>
-            <button class="btn btn-sm btn-warning"  @click="action(detailInst,'stop')">⏹ Stop</button>
-            <button class="btn btn-sm btn-error"    @click="action(detailInst,'kill')">⚡ Kill</button>
+            <button class="btn btn-sm btn-success"  @click="openStartOptions(detailInst)" :disabled="detailInst.busy || isStartedLike(detailInst.status)">▶ Start</button>
+            <button class="btn btn-sm btn-warning"  @click="action(detailInst,'stop')" :disabled="detailInst.busy || !isStartedLike(detailInst.status)">⏹ Stop</button>
+            <button class="btn btn-sm btn-error"    @click="action(detailInst,'kill')" :disabled="detailInst.busy || !isStartedLike(detailInst.status)">⚡ Kill</button>
           </div>
 
           <div>
@@ -724,18 +724,31 @@ export default {
       try {
         const names = await api.get("/api/v1/instances");
         if (!Array.isArray(names)) return;
-        // Keep existing status during update, mark as loading
-        const prev = Object.fromEntries(instances.value.map(i => [i.name, i.status]));
-        instances.value = names.map(n => ({
-          name: n, status: prev[n] ?? "unknown", loading: true, busy: false,
-        }));
+        // Keep existing row objects and status values to avoid status badge flicker.
+        const prevByName = new Map(instances.value.map(i => [i.name, i]));
+        instances.value = names.map((name) => {
+          const prev = prevByName.get(name);
+          if (prev) {
+            prev.loading = false;
+            return prev;
+          }
+          return { name, status: "unknown", loading: true, busy: false };
+        });
         // Fetch all statuses in parallel
         await Promise.allSettled(names.map(async (name, idx) => {
+          const row = instances.value[idx];
           try {
             const s = await api.get(`/api/v1/instances/${encodeURIComponent(name)}`);
-            instances.value[idx] = { ...instances.value[idx], status: s?.status ?? "unknown", loading: false };
+            const nextStatus = s?.status ?? "unknown";
+            if (row.status !== nextStatus || row.loading) {
+              row.status = nextStatus;
+              row.loading = false;
+            }
           } catch {
-            instances.value[idx] = { ...instances.value[idx], status: "unknown", loading: false };
+            if (row.status !== "unknown" || row.loading) {
+              row.status = "unknown";
+              row.loading = false;
+            }
           }
         }));
         lastUpdated.value = new Date().toLocaleTimeString("en-US");
@@ -763,9 +776,9 @@ export default {
 
     function applyInstanceStatus(name, status) {
       const listInst = instances.value.find(i => i.name === name);
-      if (listInst) listInst.status = status;
+      if (listInst && listInst.status !== status) listInst.status = status;
       if (detailInst.value?.name === name) {
-        detailInst.value.status = status;
+        if (detailInst.value.status !== status) detailInst.value.status = status;
         if (isStartedLike(status)) {
           if (sessionAutoOn.value) restartSessionPoller();
         } else {
@@ -1486,6 +1499,7 @@ export default {
       isDetailStarted,
       selectedSession, sessionInfoData, sessionInfoLoading, sessionActionBusy, sessionAutoOn, sessionIntervalSec,
       templateSaving,
+      isStartedLike,
       sessionFilter,
       sessionInfoRef, sessionEditRef, sessionEdit,
       runningCount, stoppedCount,

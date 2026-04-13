@@ -108,6 +108,15 @@
         background: #f5f7f9;
       }
 
+      .btn:disabled,
+      .btn[disabled],
+      .btn.btn-disabled {
+        opacity: 0.42 !important;
+        filter: grayscale(0.35) saturate(0.7);
+        cursor: not-allowed !important;
+        box-shadow: none !important;
+      }
+
       .btn-success,
       .btn-warning,
       .btn-error,
