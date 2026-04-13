@@ -26,7 +26,8 @@ Python-based web application for the BNG Blaster Controller with a modern single
 - `requirements.txt`: Python dependencies
 - `config-templates/`: persisted server-side JSON templates
 - `state/`: persisted server-side runtime state (e.g. per-instance last start options)
-- `static/index.html`: SPA shell and global UI styles
+- `static/index.html`: SPA shell
+- `static/theme.css`: global UI theme and style tokens
 - `static/js/app.js`: Vue app bootstrap, router, sidebar layout
 - `static/js/api.js`: shared HTTP client, poller helper, Prometheus parser
 - `static/js/pages/instances.js`: instance lifecycle + session management UI
