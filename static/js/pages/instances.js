@@ -4,12 +4,20 @@ import { api, usePoller } from "../api.js";
 
 const STATUS_CLASS = {
   started: "badge-success",
+  running: "badge-success",
+  active: "badge-success",
+  up: "badge-success",
   stopped: "badge-ghost",
   error:   "badge-error",
   unknown: "badge-warning",
 };
 
-const SESSION_PAGE_SIZE = 15;
+const SESSION_PAGE_SIZE = 10;
+function isStartedLike(status) {
+  const s = String(status ?? "").trim().toLowerCase();
+  return s === "started" || s === "running" || s === "active" || s === "up";
+}
+
 const START_LOGGING_FLAGS = [
   { value: "debug", desc: "debug events" },
   { value: "info", desc: "informational events" },
@@ -46,7 +54,7 @@ const StatusBadge = {
   setup(props) {
     const cls = computed(() => STATUS_CLASS[props.status] ?? "badge-ghost");
     const dotCls = computed(() => ({
-      "bg-success": props.status === "started",
+      "bg-success": isStartedLike(props.status),
       "bg-error":   props.status === "error",
       "bg-warning": props.status === "unknown",
       "bg-base-content/30": props.status === "stopped",
@@ -377,6 +385,12 @@ export default {
                   <option :value="5">5s</option>
                   <option :value="10">10s</option>
                 </select>
+                <input
+                  v-model.trim="sessionFilter"
+                  type="text"
+                  placeholder="Filter sessions..."
+                  class="input input-bordered input-xs w-40 bg-base-300"
+                />
                 <span class="text-[11px] text-base-content/40">{{ sessionsUpdated }}</span>
                 <button class="btn btn-xs btn-ghost" @click="loadSessions" :disabled="sessionsLoading || !isDetailStarted">Reload</button>
               </div>
@@ -462,7 +476,7 @@ export default {
               </div>
               <div v-if="sessionPageCount > 1" class="flex items-center justify-between mt-2 text-xs text-base-content/50">
                 <span>
-                  {{ sessionPageStart + 1 }}-{{ sessionPageEnd }} of {{ sessions.length }} sessions
+                  {{ sessionPageStart + 1 }}-{{ sessionPageEnd }} of {{ filteredSessions.length }} sessions
                 </span>
                 <div class="flex items-center gap-2">
                   <button class="btn btn-xs btn-ghost" @click="prevSessionPage" :disabled="sessionPage <= 1">Back</button>
@@ -629,6 +643,7 @@ export default {
       saving: false,
       error: "",
     });
+    const sessionFilter = ref("");
     const sessionAutoOn = ref(true);
     const sessionIntervalSec = ref(3);
     const sessionPage = ref(1);
@@ -695,9 +710,9 @@ export default {
 
     const downloadFiles = ["config.json","run.json","run.log","run_report.json","run.pcap","run.stdout","run.stderr"];
 
-    const runningCount = computed(() => instances.value.filter(i => i.status === "started").length);
-    const stoppedCount = computed(() => instances.value.filter(i => i.status !== "started").length);
-    const isDetailStarted = computed(() => detailInst.value?.status === "started");
+    const runningCount = computed(() => instances.value.filter(i => isStartedLike(i.status)).length);
+    const stoppedCount = computed(() => instances.value.filter(i => !isStartedLike(i.status)).length);
+    const isDetailStarted = computed(() => isStartedLike(detailInst.value?.status));
 
     function showToast(msg, type = "success") {
       toast.value = { msg, type };
@@ -751,7 +766,7 @@ export default {
       if (listInst) listInst.status = status;
       if (detailInst.value?.name === name) {
         detailInst.value.status = status;
-        if (status === "started") {
+        if (isStartedLike(status)) {
           if (sessionAutoOn.value) restartSessionPoller();
         } else {
           drainSessionsAfterStop();
@@ -776,8 +791,8 @@ export default {
       const maxAttempts = (act === "stop" || act === "kill") ? 8 : 6;
       for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
         const status = await fetchInstanceStatus(name);
-        if (act === "start" && status === "started") return;
-        if ((act === "stop" || act === "kill") && status !== "started") return;
+        if (act === "start" && isStartedLike(status)) return;
+        if ((act === "stop" || act === "kill") && !isStartedLike(status)) return;
         if (attempt < maxAttempts - 1) {
           await new Promise(resolve => setTimeout(resolve, 350));
         }
@@ -1032,6 +1047,7 @@ export default {
       sessionsError.value = "";
       sessionsRaw.value = null;
       sessionsUpdated.value = "—";
+      sessionFilter.value = "";
       selectedSession.value = null;
       sessionInfoData.value = null;
       sessionPage.value = 1;
@@ -1158,11 +1174,21 @@ export default {
     }
 
     const sessions = computed(() => normalizeSessions(sessionsRaw.value));
-    const sessionPageCount = computed(() => Math.max(1, Math.ceil(sessions.value.length / SESSION_PAGE_SIZE)));
+    const filteredSessions = computed(() => {
+      const q = String(sessionFilter.value || "").trim().toLowerCase();
+      if (!q) return sessions.value;
+      return sessions.value.filter((row) => {
+        const text = [row.id, row.username, row.status, row.iface, row.mac, row.vlan]
+          .map(v => String(v ?? "").toLowerCase())
+          .join(" ");
+        return text.includes(q);
+      });
+    });
+    const sessionPageCount = computed(() => Math.max(1, Math.ceil(filteredSessions.value.length / SESSION_PAGE_SIZE)));
     const sessionPageStart = computed(() => (sessionPage.value - 1) * SESSION_PAGE_SIZE);
-    const sessionPageEnd = computed(() => Math.min(sessionPageStart.value + SESSION_PAGE_SIZE, sessions.value.length));
+    const sessionPageEnd = computed(() => Math.min(sessionPageStart.value + SESSION_PAGE_SIZE, filteredSessions.value.length));
     const pagedSessions = computed(() =>
-      sessions.value.slice(sessionPageStart.value, sessionPageStart.value + SESSION_PAGE_SIZE)
+      filteredSessions.value.slice(sessionPageStart.value, sessionPageStart.value + SESSION_PAGE_SIZE)
     );
     const emptySessionRows = computed(() =>
       Array.from({ length: Math.max(0, SESSION_PAGE_SIZE - pagedSessions.value.length) }, (_, idx) => idx + 1)
@@ -1317,7 +1343,7 @@ export default {
     async function loadSessions(options = {}) {
       if (!detailInst.value) return;
       const allowWhenStopped = options.allowWhenStopped === true;
-      if (detailInst.value.status !== "started" && !allowWhenStopped) {
+      if (!isStartedLike(detailInst.value.status) && !allowWhenStopped) {
         return;
       }
       sessionsLoading.value = true;
@@ -1375,7 +1401,7 @@ export default {
     }
 
     async function drainSessionsAfterStop() {
-      if (!detailInst.value || detailInst.value.status === "started" || sessionDrainInProgress.value) return;
+      if (!detailInst.value || isStartedLike(detailInst.value.status) || sessionDrainInProgress.value) return;
       sessionDrainInProgress.value = true;
       try {
         const maxAttempts = 10;
@@ -1400,7 +1426,7 @@ export default {
 
     function restartSessionPoller() {
       stopSessionPoller();
-      if (!sessionAutoOn.value || !detailInst.value || detailInst.value.status !== "started") return;
+      if (!sessionAutoOn.value || !detailInst.value || !isStartedLike(detailInst.value.status)) return;
       sessionTimer = setInterval(() => {
         loadSessions().catch(() => {});
       }, sessionIntervalSec.value * 1000);
@@ -1447,15 +1473,20 @@ export default {
       if (sessionPage.value > pageCount) sessionPage.value = pageCount;
     });
 
+    watch(sessionFilter, () => {
+      sessionPage.value = 1;
+    });
+
     return {
       instances, loading, lastUpdated, autoOn, intervalSec, toast,
       templates, modalRef, startOptionsRef, editing, form, startOptions, startLoggingFlags,
       detailRef, detailInst, cmdName, cmdArgs, cmdResult, downloadFiles,
-      sessionsLoading, sessionsError, sessions, sessionsUpdated,
+      sessionsLoading, sessionsError, sessions, filteredSessions, sessionsUpdated,
       sessionPage, sessionPageCount, sessionPageStart, sessionPageEnd, pagedSessions, emptySessionRows,
       isDetailStarted,
       selectedSession, sessionInfoData, sessionInfoLoading, sessionActionBusy, sessionAutoOn, sessionIntervalSec,
       templateSaving,
+      sessionFilter,
       sessionInfoRef, sessionEditRef, sessionEdit,
       runningCount, stoppedCount,
       instIfVarModal, instIfVarList, instIfVarSelections, instIfVarSearch, instIfVarLoading,
