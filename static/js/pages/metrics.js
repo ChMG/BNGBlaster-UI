@@ -259,9 +259,8 @@ export default {
         const text = await api.get("/metrics");
         metrics.value = parsePrometheus(typeof text === "string" ? text : "");
         lastUpdated.value = new Date().toLocaleTimeString("en-US");
-        // Auto-expand first few groups
-        const groups = groupMetrics(metrics.value);
-        expandedGroups.value = new Set(groups.slice(0, 3).map(g => g.id));
+        // Keep all groups collapsed by default
+        expandedGroups.value = new Set();
       } catch (e) {
         error.value = `Failed to load metrics: ${e.message}`;
       } finally {
