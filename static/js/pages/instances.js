@@ -40,6 +40,20 @@ const START_LOGGING_FLAGS = [
   { value: "icmp", desc: "log ICMP events" },
 ];
 
+const START_METRIC_FLAGS = [
+  { value: "session_counters", desc: "session statistics" },
+  { value: "interfaces", desc: "interface/link counters" },
+  { value: "access_interfaces", desc: "access interface function counters" },
+  { value: "network_interfaces", desc: "network interface function counters" },
+  { value: "a10nsp_interfaces", desc: "a10nsp interface function counters" },
+  { value: "streams", desc: "stream counters" },
+];
+
+const START_REPORT_FLAGS = [
+  { value: "sessions", desc: "sessions" },
+  { value: "streams", desc: "streams" },
+];
+
 const StatusBadge = {
   props: ["status", "loading"],
   template: `
@@ -329,6 +343,36 @@ export default {
             </div>
           </div>
 
+          <div v-if="startOptions.report">
+            <label class="label pb-1"><span class="label-text font-semibold">Report flags (optional)</span></label>
+            <div class="bg-base-300 rounded-lg p-2 flex flex-wrap gap-2">
+              <label v-for="flag in startReportFlags" :key="flag.value" class="flex items-center gap-1 text-xs cursor-pointer" :title="flag.desc">
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-xs"
+                  :checked="startOptions.reportFlags.includes(flag.value)"
+                  @change="toggleStartReportFlag(flag.value, $event.target.checked)"
+                />
+                <span class="mono">{{ flag.value }}</span>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label class="label pb-1"><span class="label-text font-semibold">Metric flags (optional)</span></label>
+            <div class="bg-base-300 rounded-lg p-2 flex flex-wrap gap-2">
+              <label v-for="flag in startMetricFlags" :key="flag.value" class="flex items-center gap-1 text-xs cursor-pointer" :title="flag.desc">
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-xs"
+                  :checked="startOptions.metricFlags.includes(flag.value)"
+                  @change="toggleStartMetricFlag(flag.value, $event.target.checked)"
+                />
+                <span class="mono">{{ flag.value }}</span>
+              </label>
+            </div>
+          </div>
+
           <div>
             <label class="label pb-1"><span class="label-text font-semibold">Session count (optional)</span></label>
             <input
@@ -603,6 +647,8 @@ export default {
     const toast       = ref(null);
     const templates   = ref([]);
     const startLoggingFlags = START_LOGGING_FLAGS;
+    const startMetricFlags = START_METRIC_FLAGS;
+    const startReportFlags = START_REPORT_FLAGS;
 
     // Modal state
     const modalRef = ref(null);
@@ -615,6 +661,8 @@ export default {
       report: false,
       pcap: false,
       loggingFlags: [],
+      reportFlags: [],
+      metricFlags: [],
       sessionCount: "",
       saving: false,
       error: "",
@@ -970,6 +1018,8 @@ export default {
         report: false,
         pcap: false,
         loggingFlags: ["error", "ip"],
+        reportFlags: [],
+        metricFlags: [],
         sessionCount: "",
         saving: false,
         error: "",
@@ -984,6 +1034,16 @@ export default {
         if (Array.isArray(saved.logging_flags)) {
           const validFlags = new Set(START_LOGGING_FLAGS.map(f => f.value));
           startOptions.value.loggingFlags = saved.logging_flags.filter(f => validFlags.has(f));
+        }
+
+        if (Array.isArray(saved.report_flags)) {
+          const validReportFlags = new Set(START_REPORT_FLAGS.map(f => f.value));
+          startOptions.value.reportFlags = saved.report_flags.filter(f => validReportFlags.has(f));
+        }
+
+        if (Array.isArray(saved.metric_flags)) {
+          const validMetricFlags = new Set(START_METRIC_FLAGS.map(f => f.value));
+          startOptions.value.metricFlags = saved.metric_flags.filter(f => validMetricFlags.has(f));
         }
 
         if (saved.session_count !== undefined && saved.session_count !== null) {
@@ -1005,6 +1065,20 @@ export default {
       startOptions.value.loggingFlags = Array.from(set);
     }
 
+    function toggleStartMetricFlag(flag, enabled) {
+      const set = new Set(startOptions.value.metricFlags);
+      if (enabled) set.add(flag);
+      else set.delete(flag);
+      startOptions.value.metricFlags = Array.from(set);
+    }
+
+    function toggleStartReportFlag(flag, enabled) {
+      const set = new Set(startOptions.value.reportFlags);
+      if (enabled) set.add(flag);
+      else set.delete(flag);
+      startOptions.value.reportFlags = Array.from(set);
+    }
+
     function buildStartBody() {
       const body = {};
       if (startOptions.value.logging) {
@@ -1015,9 +1089,15 @@ export default {
       }
       if (startOptions.value.report) {
         body.report = true;
+        if (startOptions.value.reportFlags.length) {
+          body.report_flags = [...startOptions.value.reportFlags];
+        }
       }
       if (startOptions.value.pcap) {
         body.pcap = true;
+      }
+      if (startOptions.value.metricFlags.length) {
+        body.metric_flags = [...startOptions.value.metricFlags];
       }
       const scRaw = String(startOptions.value.sessionCount || "").trim();
       if (scRaw !== "") {
@@ -1492,7 +1572,7 @@ export default {
 
     return {
       instances, loading, lastUpdated, autoOn, intervalSec, toast,
-      templates, modalRef, startOptionsRef, editing, form, startOptions, startLoggingFlags,
+      templates, modalRef, startOptionsRef, editing, form, startOptions, startLoggingFlags, startMetricFlags, startReportFlags,
       detailRef, detailInst, cmdName, cmdArgs, cmdResult, downloadFiles,
       sessionsLoading, sessionsError, sessions, filteredSessions, sessionsUpdated,
       sessionPage, sessionPageCount, sessionPageStart, sessionPageEnd, pagedSessions, emptySessionRows,
@@ -1507,7 +1587,7 @@ export default {
       instIfVarSelectionsComplete, instAvailableInterfaces, instFilteredInterfaces,
       stopAndReapplyModal, stopAndReapplyPending,
       loadAll, action, deleteInst, openCreate, openEdit, closeModal,
-      openStartOptions, closeStartOptions, confirmStartWithOptions, toggleStartLoggingFlag,
+      openStartOptions, closeStartOptions, confirmStartWithOptions, toggleStartLoggingFlag, toggleStartMetricFlag, toggleStartReportFlag,
       applyTemplate, confirmApplyTemplateWithVars, saveInstance, proceedStopApplyRestart, openDetail, sendCommand, loadSessions,
       runSessionAction, restartSession, sessionActionMeta, prevSessionPage, nextSessionPage,
       openSessionEdit, closeSessionEdit, saveSessionEdit,

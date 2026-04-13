@@ -538,7 +538,7 @@ def put_instance_start_options(name: str):
     if body is None or not isinstance(body, dict):
         return jsonify({"error": "body must be valid JSON object"}), 400
 
-    allowed = {"logging", "logging_flags", "report", "pcap", "session_count"}
+    allowed = {"logging", "logging_flags", "metric_flags", "report", "report_flags", "pcap", "session_count"}
     cleaned = {k: v for k, v in body.items() if k in allowed}
 
     with _STATE_LOCK:

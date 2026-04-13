@@ -319,8 +319,16 @@ components:
           type: array
           items:
             type: string
+        metric_flags:
+          type: array
+          items:
+            type: string
         report:
           type: boolean
+        report_flags:
+          type: array
+          items:
+            type: string
         pcap:
           type: boolean
         session_count:

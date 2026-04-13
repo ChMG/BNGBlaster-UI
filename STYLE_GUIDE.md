@@ -15,26 +15,26 @@ All color tokens are centralized in the `:root` block in [static/theme.css](stat
 
 ```css
 :root {
-  --color-brand: #e20074;
-  --color-brand-soft: rgba(226, 0, 116, 0.1);
-  --color-brand-hover: #bf0063;
-  --color-bg: #f3f5f7;
+  --color-brand: #0057b8;
+  --color-brand-soft: rgba(0, 87, 184, 0.12);
+  --color-brand-hover: #004796;
+  --color-bg: #f4f7fb;
   --color-surface: #ffffff;
-  --color-surface-alt: #f8f9fb;
-  --color-border: #d8dde3;
-  --color-border-hover: #b8c0c8;
-  --color-text: #1e2a36;
-  --color-muted: #5f6b76;
+  --color-surface-alt: #eef3fa;
+  --color-border: #cfdaea;
+  --color-border-hover: #afc2dc;
+  --color-text: #1d2a3a;
+  --color-muted: #5e6f82;
   --color-text-on-brand: #ffffff;
 
-  --color-brand-ring: rgba(40, 212, 172, 0.4);
-  --color-brand-border-soft: rgba(226, 0, 116, 0.32);
-  --color-brand-border-strong: rgba(226, 0, 116, 0.62);
-  --color-brand-badge-text: #8f0049;
-  --color-brand-badge-border: rgba(226, 0, 116, 0.35);
+  --color-brand-ring: rgba(0, 87, 184, 0.35);
+  --color-brand-border-soft: rgba(0, 87, 184, 0.30);
+  --color-brand-border-strong: rgba(0, 87, 184, 0.55);
+  --color-brand-badge-text: #003e7f;
+  --color-brand-badge-border: rgba(0, 87, 184, 0.32);
 
-  --color-surface-hover: #f5f7f9;
-  --color-scrollbar-thumb: rgba(31, 45, 58, 0.2);
+  --color-surface-hover: #eaf1fb;
+  --color-scrollbar-thumb: rgba(29, 42, 58, 0.22);
 
   --brand: var(--color-brand);
   --brand-dim: var(--color-brand-soft);
@@ -101,7 +101,7 @@ For full portability, replace this with a token from [static/theme.css](static/t
 
 ## Example Alternative Palettes
 
-Current active palette in this repository: Green Theme.
+Current active palette in this repository: Blue Theme.
 
 ### Blue Theme
 

@@ -11,6 +11,6 @@
   </defs>
 
   <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#bg)"/>
-  <path d="M34 14L20 36h10l-4 14 18-24H33l1-12z" fill="url(#bolt)"/>
-  <text x="12" y="55" font-family="Segoe UI, Arial, sans-serif" font-size="10" font-weight="700" fill="#e5e7eb">BB-UI</text>
+  <path d="M32 6L20 27h10l-3 12 17-21H33l-1-11z" fill="url(#bolt)"/>
+  <text x="32" y="55" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="11" font-weight="700" fill="#e5e7eb">BB-UI</text>
 </svg>

@@ -1,24 +1,24 @@
 :root {
-  --color-brand: #0b8a57;
-  --color-brand-soft: rgba(11, 138, 87, 0.12);
-  --color-brand-hover: #086e45;
-  --color-bg: #f2f8f5;
+  --color-brand: #0057b8;
+  --color-brand-soft: rgba(0, 87, 184, 0.12);
+  --color-brand-hover: #004796;
+  --color-bg: #f4f7fb;
   --color-surface: #ffffff;
-  --color-surface-alt: #ecf5ef;
-  --color-border: #c9dfd1;
-  --color-border-hover: #a8c7b4;
-  --color-text: #1f2f27;
-  --color-muted: #5b6e63;
+  --color-surface-alt: #eef3fa;
+  --color-border: #cfdaea;
+  --color-border-hover: #afc2dc;
+  --color-text: #1d2a3a;
+  --color-muted: #5e6f82;
   --color-text-on-brand: #ffffff;
 
-  --color-brand-ring: rgba(11, 138, 87, 0.35);
-  --color-brand-border-soft: rgba(11, 138, 87, 0.30);
-  --color-brand-border-strong: rgba(11, 138, 87, 0.55);
-  --color-brand-badge-text: #065536;
-  --color-brand-badge-border: rgba(11, 138, 87, 0.32);
+  --color-brand-ring: rgba(0, 87, 184, 0.35);
+  --color-brand-border-soft: rgba(0, 87, 184, 0.30);
+  --color-brand-border-strong: rgba(0, 87, 184, 0.55);
+  --color-brand-badge-text: #003e7f;
+  --color-brand-badge-border: rgba(0, 87, 184, 0.32);
 
-  --color-surface-hover: #e7f3ec;
-  --color-scrollbar-thumb: rgba(31, 47, 39, 0.22);
+  --color-surface-hover: #eaf1fb;
+  --color-scrollbar-thumb: rgba(29, 42, 58, 0.22);
 
   --brand: var(--color-brand);
   --brand-dim: var(--color-brand-soft);
