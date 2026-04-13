@@ -87,7 +87,8 @@ const AppLayout = {
           <div class="text-xs mono text-base-content/50 break-all">{{ backendUrl }}</div>
           <div class="text-10 text-base-content/30 mono break-all">
             <span>app:</span>
-            <span class="text-base-content/50">{{ appVersion }}</span>
+            <span :class="appVersionClass()">{{ appVersion }}</span>
+            <span v-if="showAppLatestHint()" class="text-base-content/40"> (latest: {{ appLatest }})</span>
           </div>
           <div v-if="isProxied" class="text-10 text-base-content/30 mono break-all">proxied to {{ backendTarget }}</div>
           <div class="flex items-center gap-1.5">
@@ -121,6 +122,9 @@ const AppLayout = {
     const route      = useRoute();
     const online     = ref(false);
     const appVersion = ref("—");
+    const appLatest = ref("");
+    const appUpToDate = ref(null);
+    const appVersionCheckEnabled = ref(false);
     const ctrlVersion = ref("…");
     const blasterVersion = ref("…");
     const ctrlLatest = ref("");
@@ -145,6 +149,11 @@ const AppLayout = {
       try {
         const info = await api.get("/ui-api/backend-info");
         appVersion.value = info?.app_version || "—";
+        appVersionCheckEnabled.value = !!info?.app_version_check_enabled;
+        appLatest.value = info?.app_version_status?.latest || "";
+        appUpToDate.value = typeof info?.app_version_status?.up_to_date === "boolean"
+          ? info.app_version_status.up_to_date
+          : null;
         versionCheckEnabled.value = !!info?.version_check_enabled;
         const urls = Array.isArray(info?.backend_urls) ? info.backend_urls : [];
         backendOptions.value = urls;
@@ -180,6 +189,9 @@ const AppLayout = {
       } catch {
         online.value = false;
         appVersion.value = "—";
+        appLatest.value = "";
+        appUpToDate.value = null;
+        appVersionCheckEnabled.value = false;
         ctrlVersion.value = "—";
         blasterVersion.value = "—";
         ctrlLatest.value = "";
@@ -197,6 +209,15 @@ const AppLayout = {
 
     function showLatestHint(upToDate, latest) {
       return versionCheckEnabled.value && upToDate === false && !!latest;
+    }
+
+    function appVersionClass() {
+      if (!appVersionCheckEnabled.value || appUpToDate.value === null) return "text-base-content/50";
+      return appUpToDate.value ? "text-success" : "text-error";
+    }
+
+    function showAppLatestHint() {
+      return appVersionCheckEnabled.value && appUpToDate.value === false && !!appLatest.value;
     }
 
     function onBackendChange() {
@@ -231,6 +252,7 @@ const AppLayout = {
       backendUrl, backendTarget, backendOptions, selectedBackend,
       isMultiBackend, isProxied, currentPath, onBackendChange, backendOptionLabel,
       versionClass, showLatestHint, ctrlUpToDate, blasterUpToDate,
+      appVersionClass, showAppLatestHint, appLatest,
     };
   },
 };

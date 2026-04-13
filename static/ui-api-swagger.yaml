@@ -254,6 +254,10 @@ components:
       properties:
         app_version:
           type: string
+        app_version_check_enabled:
+          type: boolean
+        app_version_status:
+          $ref: '#/components/schemas/AppVersionStatusEntry'
         backend_url:
           type: string
         backend_urls:
@@ -271,7 +275,23 @@ components:
               $ref: '#/components/schemas/VersionStatusEntry'
             blaster:
               $ref: '#/components/schemas/VersionStatusEntry'
-          required: [app_version, backend_url, backend_urls, multi_backend, version_check_enabled]
+      required: [app_version, app_version_check_enabled, backend_url, backend_urls, multi_backend, version_check_enabled]
+
+    AppVersionStatusEntry:
+      type: object
+      properties:
+        current:
+          type: string
+          nullable: true
+        latest:
+          type: string
+          nullable: true
+        up_to_date:
+          type: boolean
+          nullable: true
+        source_url:
+          type: string
+      required: [source_url]
 
     VersionStatusEntry:
       type: object

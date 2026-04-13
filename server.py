@@ -81,6 +81,12 @@ START_OPTIONS_CLEANUP_INTERVAL_SEC = max(30, int(os.environ.get("START_OPTIONS_C
 VERSION_CHECK_ENABLED = os.environ.get("VERSION_CHECK_ENABLED", "1") not in {"0", "false", "False", "no", "NO"}
 VERSION_CHECK_CACHE_SEC = max(60, int(os.environ.get("VERSION_CHECK_CACHE_SEC", "3600")))
 APP_VERSION = _load_app_version(BASE_DIR)
+APP_VERSION_CHECK_ENABLED = os.environ.get("APP_VERSION_CHECK_ENABLED", "1") not in {"0", "false", "False", "no", "NO"}
+APP_VERSION_CHECK_CACHE_SEC = max(60, int(os.environ.get("APP_VERSION_CHECK_CACHE_SEC", str(VERSION_CHECK_CACHE_SEC))))
+APP_VERSION_CHECK_URL = os.environ.get(
+    "APP_VERSION_CHECK_URL",
+    "https://github.com/ChMG/BNGBlaster-UI/blob/main/VERSION",
+)
 
 _HOP_BY_HOP = frozenset(
     {"connection", "keep-alive", "transfer-encoding", "te",
@@ -97,6 +103,7 @@ _VERSION_CACHE_LOCK = threading.Lock()
 _version_cache: dict[str, dict] = {
     "controller": {"value": None, "ts": 0.0},
     "blaster": {"value": None, "ts": 0.0},
+    "app-ui": {"value": None, "ts": 0.0},
 }
 
 
@@ -322,6 +329,42 @@ def _get_cached_latest_release(which: str, repo: str) -> str | None:
     return fresh
 
 
+def _github_blob_to_raw_url(url: str) -> str:
+    m = re.match(r"^https://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+)$", (url or "").strip())
+    if not m:
+        return url
+    owner, repo, ref, path = m.group(1), m.group(2), m.group(3), m.group(4)
+    return f"https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}"
+
+
+def _fetch_remote_app_version(url: str) -> str | None:
+    try:
+        raw_url = _github_blob_to_raw_url(url)
+        r = req_lib.get(raw_url, timeout=10)
+        if not r.ok:
+            return None
+        line = (r.text or "").strip().splitlines()
+        if not line:
+            return None
+        value = line[0].strip()
+        return value or None
+    except Exception:
+        return None
+
+
+def _get_cached_remote_app_version(url: str) -> str | None:
+    now = time.time()
+    with _VERSION_CACHE_LOCK:
+        slot = _version_cache.get("app-ui", {"value": None, "ts": 0.0})
+        if now - float(slot.get("ts", 0.0)) < APP_VERSION_CHECK_CACHE_SEC:
+            return slot.get("value")
+
+    fresh = _fetch_remote_app_version(url)
+    with _VERSION_CACHE_LOCK:
+        _version_cache["app-ui"] = {"value": fresh, "ts": now}
+    return fresh
+
+
 def _fetch_current_backend_versions(target: str) -> tuple[str | None, str | None]:
     try:
         r = req_lib.get(f"{target}/api/v1/version", timeout=10)
@@ -434,7 +477,17 @@ def backend_info():
         "multi_backend": len(BACKEND_URLS) > 1,
         "version_check_enabled": VERSION_CHECK_ENABLED,
         "app_version": APP_VERSION,
+        "app_version_check_enabled": APP_VERSION_CHECK_ENABLED,
     }
+
+    if APP_VERSION_CHECK_ENABLED:
+        latest_app = _get_cached_remote_app_version(APP_VERSION_CHECK_URL)
+        result["app_version_status"] = {
+            "current": APP_VERSION,
+            "latest": latest_app,
+            "up_to_date": _is_up_to_date(APP_VERSION, latest_app or ""),
+            "source_url": APP_VERSION_CHECK_URL,
+        }
 
     if VERSION_CHECK_ENABLED:
         target = _resolve_selected_target(request.headers.get("X-Bngblaster-Target", ""), strict=True)

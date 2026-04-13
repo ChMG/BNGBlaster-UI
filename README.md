@@ -174,6 +174,9 @@ Gunicorn runtime options can be customized via environment variables:
 - `VERSION_CHECK_CACHE_SEC` (default: `3600`, minimum: `60`)
 - `START_OPTIONS_CLEANUP_ENABLED` (default: `1`)
 - `START_OPTIONS_CLEANUP_INTERVAL_SEC` (default: `300`, minimum: `30`)
+- `APP_VERSION_CHECK_ENABLED` (default: `1`)
+- `APP_VERSION_CHECK_CACHE_SEC` (default: `3600`, minimum: `60`)
+- `APP_VERSION_CHECK_URL` (default: `https://github.com/ChMG/BNGBlaster-UI/blob/main/VERSION`)
 
 Application version is read from the `VERSION` file in project root (shown in sidebar Backend section).
 
@@ -198,6 +201,7 @@ http://localhost:8080
 	- Controller: https://github.com/rtbrick/bngblaster-controller/releases
 	- BNG Blaster: https://github.com/rtbrick/bngblaster/releases
 	- Sidebar coloring under Backend: green = current, red = outdated
+- App version check compares local `VERSION` with the remote version file at `APP_VERSION_CHECK_URL`.
 - Template files are stored server-side in `config-templates/`.
 - Runtime state is stored server-side in `state/` (Docker Compose mounts this directory to the host).
 - A periodic server-side cleanup removes orphaned start-option entries when instances no longer exist.
