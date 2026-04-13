@@ -8,6 +8,7 @@ Python-based web application for the BNG Blaster Controller with a modern single
 
 - Instances as a table with automatically updated status
 - Start, stop, kill, delete, create, and edit actions for instances
+- Start dialog with optional logging/metric/report flags (each with conditional visibility)
 - **Server-side configuration templates with interface variable substitution** ($IF1, $IF2, ...)
 - Metrics page for Prometheus text format
 - Technical API explorer based on the OpenAPI file

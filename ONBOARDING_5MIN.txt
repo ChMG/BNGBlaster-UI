@@ -24,7 +24,7 @@ BNG BLASTER UI - 5 MIN ONBOARDING
 - Most feature work happens in: static/js/pages/instances.js
 
 5) Current key behavior to know
-- Instance Start opens options modal (logging/report/pcap/logging_flags/session_count)
+- Instance Start opens options modal (logging/report/pcap/logging_flags/metric_flags/report_flags/session_count)
 - Session refresh pauses when instance is stopped
 - After stop/kill, sessions are drained (refreshed until empty) before polling stops
 - Session edit supports only session-update fields

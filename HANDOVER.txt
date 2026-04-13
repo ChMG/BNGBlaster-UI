@@ -58,11 +58,15 @@ D) Start instance options
   - Enable report
   - Enable PCAP
   - Logging flags (shown only if logging enabled)
+  - Metric flags (optional, always visible)
+  - Report flags (optional, visible only if reporting enabled)
   - Optional session count
 - Request building behavior:
   - logging only if enabled
   - logging_flags only when logging enabled and at least one flag selected
+  - metric_flags only if selected
   - report only if enabled
+  - report_flags only when report enabled and selected
   - pcap only if enabled
   - session_count only if provided and valid positive integer
 
