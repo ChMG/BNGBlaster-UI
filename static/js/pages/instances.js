@@ -133,14 +133,18 @@ export default {
     <div class="rounded-xl overflow-hidden border border-base-300">
       <table class="table table-zebra w-full stable-table">
         <colgroup>
-          <col style="width: 36%" />
-          <col style="width: 18%" />
-          <col style="width: 46%" />
+          <col style="width: 30%" />
+          <col style="width: 14%" />
+          <col style="width: 8%" />
+          <col style="width: 10%" />
+          <col style="width: 38%" />
         </colgroup>
         <thead class="bg-base-200">
           <tr>
             <th class="text-base-content/60 font-semibold">Instance</th>
             <th class="text-base-content/60 font-semibold">Status</th>
+            <th class="text-base-content/60 font-semibold text-right text-xs">Sessions</th>
+            <th class="text-base-content/60 font-semibold text-right text-xs">Established</th>
             <th class="text-base-content/60 font-semibold">Actions</th>
           </tr>
         </thead>
@@ -154,6 +158,12 @@ export default {
             <td>
               <StatusBadge :status="inst.status" :loading="inst.loading" />
             </td>
+            <td class="mono text-right text-xs" :class="isStartedLike(inst.status) ? 'text-base-content' : 'text-base-content/30'">
+              {{ formatCounterCell(inst.sessions) }}
+            </td>
+            <td class="mono text-right text-xs" :class="isStartedLike(inst.status) ? 'text-base-content' : 'text-base-content/30'">
+              {{ formatCounterCell(inst.sessionsEstablished) }}
+            </td>
             <td>
               <div class="flex flex-wrap gap-1">
                 <button class="btn btn-xs btn-success"  @click="openStartOptions(inst)"  :disabled="inst.busy || isStartedLike(inst.status)">▶ Start</button>
@@ -165,12 +175,12 @@ export default {
             </td>
           </tr>
           <tr v-if="!loading && !instances.length">
-            <td colspan="3" class="text-center text-base-content/30 py-10">
+            <td colspan="5" class="text-center text-base-content/30 py-10">
               No instances available. Create one with "+ New Instance".
             </td>
           </tr>
           <tr v-if="loading && !instances.length">
-            <td colspan="3" class="text-center py-10">
+            <td colspan="5" class="text-center py-10">
               <span class="loading loading-dots loading-md text-base-content/30"></span>
             </td>
           </tr>
@@ -767,6 +777,75 @@ export default {
       setTimeout(() => { toast.value = null; }, 3000);
     }
 
+    function toCounterValue(raw) {
+      if (raw === undefined || raw === null || raw === "") return null;
+      const num = Number(raw);
+      return Number.isFinite(num) ? num : null;
+    }
+
+    function formatCounterCell(value) {
+      return value === null || value === undefined ? "—" : String(value);
+    }
+
+    function parseSessionCountersResponse(payload) {
+      const src = payload && typeof payload === "object" ? payload : {};
+
+      function findFirstCounter(obj, keys, depth = 0) {
+        if (!obj || typeof obj !== "object" || depth > 5) return null;
+        for (const key of keys) {
+          const value = toCounterValue(obj[key]);
+          if (value !== null) return value;
+        }
+        for (const value of Object.values(obj)) {
+          if (value && typeof value === "object") {
+            const nested = findFirstCounter(value, keys, depth + 1);
+            if (nested !== null) return nested;
+          }
+        }
+        return null;
+      }
+
+      const sessionsKeys = [
+        "sessions",
+        "session-count",
+        "session_count",
+      ];
+      const establishedKeys = [
+        "sessions-established",
+        "sessions_established",
+        "established",
+      ];
+
+      const candidates = [
+        src,
+        src["session-counters"],
+        src.session_counters,
+        src.arguments,
+        src.result,
+        src.data,
+      ].filter(v => v && typeof v === "object");
+
+      let sessions = null;
+      let established = null;
+      for (const candidate of candidates) {
+        if (sessions === null) sessions = findFirstCounter(candidate, sessionsKeys);
+        if (established === null) established = findFirstCounter(candidate, establishedKeys);
+        if (sessions !== null && established !== null) break;
+      }
+
+      return { sessions, sessionsEstablished: established };
+    }
+
+    async function fetchSessionCounters(instanceName) {
+      const endpoint = `/api/v1/instances/${encodeURIComponent(instanceName)}/_command`;
+      try {
+        const response = await api.post(endpoint, { command: "session-counters", arguments: {} });
+        return parseSessionCountersResponse(response);
+      } catch {
+        return { sessions: null, sessionsEstablished: null };
+      }
+    }
+
     async function loadAll() {
       loading.value = true;
       try {
@@ -780,9 +859,16 @@ export default {
             prev.loading = false;
             return prev;
           }
-          return { name, status: "unknown", loading: true, busy: false };
+          return {
+            name,
+            status: "unknown",
+            loading: true,
+            busy: false,
+            sessions: null,
+            sessionsEstablished: null,
+          };
         });
-        // Fetch all statuses in parallel
+        // Fetch all statuses in parallel and attach per-instance session counters for started rows.
         await Promise.allSettled(names.map(async (name, idx) => {
           const row = instances.value[idx];
           try {
@@ -792,11 +878,21 @@ export default {
               row.status = nextStatus;
               row.loading = false;
             }
+            if (isStartedLike(nextStatus)) {
+              const counters = await fetchSessionCounters(name);
+              row.sessions = counters.sessions;
+              row.sessionsEstablished = counters.sessionsEstablished;
+            } else {
+              row.sessions = null;
+              row.sessionsEstablished = null;
+            }
           } catch {
             if (row.status !== "unknown" || row.loading) {
               row.status = "unknown";
               row.loading = false;
             }
+            row.sessions = null;
+            row.sessionsEstablished = null;
           }
         }));
         lastUpdated.value = new Date().toLocaleTimeString("en-US");
@@ -1586,6 +1682,7 @@ export default {
       instIfVarModal, instIfVarList, instIfVarSelections, instIfVarSearch, instIfVarLoading,
       instIfVarSelectionsComplete, instAvailableInterfaces, instFilteredInterfaces,
       stopAndReapplyModal, stopAndReapplyPending,
+      formatCounterCell,
       loadAll, action, deleteInst, openCreate, openEdit, closeModal,
       openStartOptions, closeStartOptions, confirmStartWithOptions, toggleStartLoggingFlag, toggleStartMetricFlag, toggleStartReportFlag,
       applyTemplate, confirmApplyTemplateWithVars, saveInstance, proceedStopApplyRestart, openDetail, sendCommand, loadSessions,
