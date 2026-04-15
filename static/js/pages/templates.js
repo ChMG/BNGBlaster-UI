@@ -30,12 +30,19 @@ export default {
       <!-- Template list -->
       <div class="md:col-span-1 space-y-2">
         <div class="text-xs font-semibold uppercase tracking-widest text-base-content/40 mb-2">Saved templates</div>
+        
+        <div class="relative">
+          <input v-model="searchQuery" type="text" placeholder="Filter templates..."
+            class="input input-bordered input-sm w-full bg-base-300" />
+          <button v-if="searchQuery" @click="searchQuery = ''"
+            class="absolute right-2 top-1/2 -translate-y-1/2 text-base-content/30 hover:text-base-content text-xs">✕</button>
+        </div>
 
         <div v-if="loadingList" class="flex justify-center py-8">
           <span class="loading loading-dots loading-md brand-text"></span>
         </div>
 
-        <div v-for="t in templates" :key="t.name"
+        <div v-for="t in filteredTemplates" :key="t.name"
           :class="['rounded-xl p-3 border cursor-pointer transition-colors',
             selected?.name === t.name
               ? 'border-brand-strong brand-bg'
@@ -53,6 +60,10 @@ export default {
         <div v-if="!loadingList && !templates.length"
           class="text-center text-base-content/30 py-8 text-sm">
           No templates available.
+        </div>
+        <div v-if="!loadingList && templates.length && !filteredTemplates.length"
+          class="text-center text-base-content/30 py-8 text-sm">
+          No templates match filter.
         </div>
       </div>
 
@@ -210,6 +221,7 @@ export default {
 
   setup() {
     const templates   = ref([]);
+    const searchQuery = ref("");
     const loadingList = ref(false);
     const selected    = ref(null);
     const editorName  = ref("");
@@ -255,6 +267,12 @@ export default {
     }
 
     const templatePreviewHtml = computed(() => highlightTemplateVariables(editorJson.value));
+
+    const filteredTemplates = computed(() => {
+      const q = searchQuery.value.toLowerCase().trim();
+      if (!q) return templates.value;
+      return templates.value.filter(t => t.name.toLowerCase().includes(q));
+    });
 
     function filteredInterfaces(v) {
       const q = (ifVarSearch.value[v] || "").toLowerCase().trim();
@@ -460,12 +478,12 @@ export default {
     });
 
     return {
-      templates, loadingList, selected, editorName, editorJson,
+      templates, searchQuery, loadingList, selected, editorName, editorJson,
       jsonError, saving, applying, applyTarget, instanceNames, toast,
       loadTemplate, createNew, formatJson, save, deleteTemplate, applyToInstance,
       ifVarModal, ifVarList, ifVarSelections, ifVarSearch, availableInterfaces, ifVarLoading,
       textVarList, textVarValues,
-      ifVarSelectionsComplete, confirmApplyWithVars, filteredInterfaces, templatePreviewHtml,
+      ifVarSelectionsComplete, confirmApplyWithVars, filteredInterfaces, templatePreviewHtml, filteredTemplates,
       stopAndReapplyModal, stopAndReapplyPending, cancelStopAndReapply, confirmStopAndReapply,
     };
   },

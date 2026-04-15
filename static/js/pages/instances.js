@@ -213,10 +213,16 @@ export default {
               <span class="label-text font-semibold">Load Template</span>
               <span class="label-text-alt text-base-content/40">optional</span>
             </label>
+            <div class="relative mb-2">
+              <input v-model="templateSearchQuery" type="text" placeholder="Filter templates..."
+                class="input input-bordered input-sm w-full bg-base-300" />
+              <button v-if="templateSearchQuery" @click="templateSearchQuery = ''"
+                class="absolute right-2 top-1/2 -translate-y-1/2 text-base-content/30 hover:text-base-content text-xs">✕</button>
+            </div>
             <div class="flex gap-2">
               <select v-model="form.selectedTemplate" class="select select-bordered select-sm flex-1 bg-base-300">
                 <option value="">— no template —</option>
-                <option v-for="t in templates" :key="t.name" :value="t.name">{{ t.name }}</option>
+                <option v-for="t in filteredTemplates" :key="t.name" :value="t.name">{{ t.name }}</option>
               </select>
               <button class="btn btn-sm btn-ghost" @click="applyTemplate" :disabled="!form.selectedTemplate">
                 Load
@@ -689,6 +695,7 @@ export default {
     const intervalSec = ref(5);
     const toast       = ref(null);
     const templates   = ref([]);
+    const templateSearchQuery = ref("");
     const startLoggingFlags = START_LOGGING_FLAGS;
     const startMetricFlags = START_METRIC_FLAGS;
     const startReportFlags = START_REPORT_FLAGS;
@@ -1745,9 +1752,15 @@ export default {
       sessionPage.value = 1;
     });
 
+    const filteredTemplates = computed(() => {
+      const q = templateSearchQuery.value.toLowerCase().trim();
+      if (!q) return templates.value;
+      return templates.value.filter(t => t.name.toLowerCase().includes(q));
+    });
+
     return {
       instances, loading, lastUpdated, autoOn, intervalSec, toast,
-      templates, modalRef, startOptionsRef, editing, form, startOptions, startLoggingFlags, startMetricFlags, startReportFlags,
+      templates, templateSearchQuery, filteredTemplates, modalRef, startOptionsRef, editing, form, startOptions, startLoggingFlags, startMetricFlags, startReportFlags,
       detailRef, detailInst, cmdName, cmdArgs, cmdResult, downloadFiles,
       sessionsLoading, sessionsError, sessions, filteredSessions, sessionsUpdated,
       sessionPage, sessionPageCount, sessionPageStart, sessionPageEnd, pagedSessions, emptySessionRows,
