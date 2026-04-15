@@ -92,6 +92,11 @@ export default {
             </div>
             <textarea v-model="editorJson" rows="20" class="textarea textarea-bordered w-full json-editor bg-base-300"
               placeholder='{"interfaces": {...}}'></textarea>
+              <div class="mt-2 rounded-xl border border-base-300 bg-base-300/60 p-3 text-xs text-base-content/70 space-y-1">
+                <p><span class="font-semibold text-base-content">Variable help:</span> use <span class="mono brand-text">$IF1</span>, <span class="mono brand-text">$IF2</span>, ... for interface placeholders and <span class="mono brand-text">$VAR1</span>, <span class="mono brand-text">$VAR2</span>, ... for free text values.</p>
+                <p>Optional interface hints are supported via <span class="mono brand-text">$IF1:eth</span>. When applying the template, the dialog pre-fills the interface filter with that hint so matching interfaces are easier to find.</p>
+                <p>Example: <span class="mono">{"interface":"$IF1","username":"$VAR1"}</span> will ask you to pick one interface and enter one text value before the template is applied.</p>
+              </div>
             <p v-if="jsonError" class="text-error text-xs mt-1">{{ jsonError }}</p>
           </div>
 
