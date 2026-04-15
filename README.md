@@ -9,7 +9,7 @@ Python-based web application for the BNG Blaster Controller with a modern single
 - Instances as a table with automatically updated status
 - Start, stop, kill, delete, create, and edit actions for instances
 - Start dialog with optional logging/metric/report flags (each with conditional visibility)
-- **Server-side configuration templates with interface variable substitution** ($IF1, $IF2, ...)
+- **Server-side configuration templates with placeholder substitution** ($IF1, $IF2, ... for interfaces and $VAR1, $VAR2, ... for free text)
 - Metrics page for Prometheus text format
 - Technical API explorer based on the OpenAPI file
 - Command dialog and file downloads per instance
@@ -205,6 +205,8 @@ http://localhost:8080
 	- Sidebar coloring under Backend: green = current, red = outdated
 - App version check compares local `VERSION` with the remote version file at `APP_VERSION_CHECK_URL`.
 - Template files are stored server-side in `config-templates/`.
+- Template apply dialogs can preview the configuration and highlight `$IF...` / `$VAR...` placeholders before substitution.
+- Applying a template to a running instance uses the same stop -> apply -> restart workflow as editing a running instance.
 - Runtime state is stored server-side in `state/` (Docker Compose mounts this directory to the host).
 - A periodic server-side cleanup removes orphaned start-option entries when instances no longer exist.
 - Manual cleanup trigger is available via `POST /ui-api/instance-start-options/_cleanup`.

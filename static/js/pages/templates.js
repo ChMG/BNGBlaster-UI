@@ -101,43 +101,75 @@ export default {
       </div>
     </div>
 
-    <!-- Interface variable substitution modal -->
+    <!-- Template variable substitution modal -->
     <dialog v-if="ifVarModal" open class="modal modal-open z-50">
-      <div class="modal-box max-w-md">
-        <h3 class="font-bold text-lg mb-1">Interface Variables</h3>
-        <p class="text-sm text-base-content/50 mb-4">Select an interface for each placeholder found in the template.</p>
+      <div class="modal-box w-full max-w-4xl max-h-[calc(100vh-4rem)] overflow-hidden flex flex-col">
+        <h3 class="font-bold text-lg mb-1">Template Variables</h3>
+        <p class="text-sm text-base-content/50 mb-4">Fill each placeholder found in the template ($IFn = interface, $VARn = free text).</p>
         <div v-if="ifVarLoading" class="flex justify-center py-4">
           <span class="loading loading-dots loading-md brand-text"></span>
         </div>
-        <div v-else class="space-y-4">
-          <div v-for="v in ifVarList" :key="v" class="space-y-1">
-            <div class="flex items-center gap-2">
-              <div class="mono text-sm font-bold brand-text w-16 shrink-0">{{ v }}</div>
-              <div class="flex-1 relative">
+        <div v-else class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] gap-4 items-start flex-1 min-h-0 overflow-hidden">
+          <div class="space-y-3 min-w-0 min-h-0 overflow-auto pr-1">
+            <div v-if="ifVarList.length" class="space-y-3">
+              <div class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">Interface variables</div>
+              <div v-for="v in ifVarList" :key="v" class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <div class="mono text-sm font-bold brand-text w-16 shrink-0">{{ v }}</div>
+                  <div class="flex-1 relative">
+                    <input
+                      v-model="ifVarSearch[v]"
+                      type="text"
+                      placeholder="Filter interfaces..."
+                      class="input input-bordered input-sm w-full bg-base-300 pr-6"
+                    />
+                    <button v-if="ifVarSearch[v]" @click="ifVarSearch[v] = ''"
+                      class="absolute right-2 top-1/2 -translate-y-1/2 text-base-content/30 hover:text-base-content text-xs">
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                <div class="pl-18">
+                  <select v-model="ifVarSelections[v]" size="3"
+                    class="select select-bordered select-sm w-full bg-base-300 h-auto py-1">
+                    <option value="">— none —</option>
+                    <option v-for="itf in filteredInterfaces(v)" :key="itf.name" :value="itf.name">
+                      {{ itf.name }}{{ itf.mac ? '  (' + itf.mac + ')' : '' }}
+                    </option>
+                  </select>
+                  <div v-if="ifVarSelections[v]" class="text-xs text-success mono mt-1 pl-1">
+                    ✓ {{ ifVarSelections[v] }}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-if="textVarList.length" class="space-y-2">
+              <div class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">Text variables</div>
+              <div v-for="v in textVarList" :key="v" class="space-y-1">
+                <div class="mono text-sm font-bold brand-text">{{ v }}</div>
                 <input
-                  v-model="ifVarSearch[v]"
+                  v-model="textVarValues[v]"
                   type="text"
-                  placeholder="Filter interfaces..."
-                  class="input input-bordered input-sm w-full bg-base-300 pr-6"
+                  placeholder="Enter value..."
+                  class="input input-bordered input-sm w-full bg-base-300"
                 />
-                <button v-if="ifVarSearch[v]" @click="ifVarSearch[v] = ''"
-                  class="absolute right-2 top-1/2 -translate-y-1/2 text-base-content/30 hover:text-base-content text-xs">
-                  ✕
-                </button>
+                <div v-if="textVarValues[v]" class="text-xs text-success mono mt-1 pl-1">
+                  ✓ {{ textVarValues[v] }}
+                </div>
               </div>
             </div>
-            <div class="pl-18">
-              <select v-model="ifVarSelections[v]" size="4"
-                class="select select-bordered select-sm w-full bg-base-300 h-auto py-1">
-                <option value="">— none —</option>
-                <option v-for="itf in filteredInterfaces(v)" :key="itf.name" :value="itf.name">
-                  {{ itf.name }}{{ itf.mac ? '  (' + itf.mac + ')' : '' }}
-                </option>
-              </select>
-              <div v-if="ifVarSelections[v]" class="text-xs text-success mono mt-1 pl-1">
-                ✓ {{ ifVarSelections[v] }}
-              </div>
+
+            <div v-if="!ifVarList.length && !textVarList.length" class="text-sm text-base-content/50">
+              No placeholders found.
             </div>
+          </div>
+
+          <div class="min-w-0 min-h-0 space-y-2 overflow-hidden">
+            <div class="flex items-center justify-between gap-3">
+              <div class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">Configuration preview</div>
+              <div class="text-[11px] text-base-content/40">Highlighted placeholders show where substitutions will happen.</div>
+            </div>
+            <pre class="bg-base-300 rounded-xl border border-base-300 p-3 text-xs mono overflow-auto h-full min-h-[16rem] max-h-[42vh] whitespace-pre-wrap break-words" v-html="templatePreviewHtml"></pre>
           </div>
         </div>
         <div class="modal-action mt-5">
@@ -150,6 +182,28 @@ export default {
         </div>
       </div>
       <div class="modal-backdrop" @click="ifVarModal = false"></div>
+    </dialog>
+
+    <dialog v-if="stopAndReapplyModal" open class="modal modal-open z-50">
+      <div class="modal-box max-w-md">
+        <h3 class="font-bold text-lg">Instance is Running</h3>
+        <div class="space-y-4 mt-3">
+          <p class="text-sm text-base-content/70">
+            The instance <span class="mono font-semibold">{{ stopAndReapplyPending?.name }}</span> is currently running.
+          </p>
+          <p class="text-sm text-base-content/70">
+            Would you like to stop it, apply the template, and restart it?
+          </p>
+        </div>
+        <div class="modal-action mt-5">
+          <button class="btn btn-sm btn-ghost" @click="cancelStopAndReapply">No</button>
+          <button class="btn btn-sm btn-success" @click="confirmStopAndReapply" :disabled="applying">
+            <span v-if="applying" class="loading loading-spinner loading-xs"></span>
+            Yes
+          </button>
+        </div>
+      </div>
+      <div class="modal-backdrop" @click="cancelStopAndReapply"></div>
     </dialog>
   </div>
   `,
@@ -166,17 +220,41 @@ export default {
     const applyTarget = ref("");
     const instanceNames = ref([]);
     const toast       = ref(null);
+    const stopAndReapplyModal = ref(false);
+    const stopAndReapplyPending = ref(null);
 
     // interface variable substitution
     const ifVarModal   = ref(false);
     const ifVarList    = ref([]);       // unique sorted variable names e.g. ["$IF1","$IF2"]
     const ifVarSelections = ref({});   // { "$IF1": "eth0", ... }
     const ifVarSearch  = ref({});      // { "$IF1": "eth", ... } — per-variable filter text
+    const textVarList  = ref([]);
+    const textVarValues = ref({});
     const availableInterfaces = ref([]);
     const ifVarLoading = ref(false);
     const ifVarSelectionsComplete = computed(
-      () => ifVarList.value.length > 0 && ifVarList.value.every(v => !!ifVarSelections.value[v])
+      () => {
+        const ifComplete = ifVarList.value.every(v => !!ifVarSelections.value[v]);
+        const textComplete = textVarList.value.every(v => String(textVarValues.value[v] ?? "").trim() !== "");
+        return (ifVarList.value.length + textVarList.value.length) > 0 && ifComplete && textComplete;
+      }
     );
+
+    function escapeHtml(text) {
+      return String(text ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+
+    function highlightTemplateVariables(text) {
+      const escaped = escapeHtml(text);
+      return escaped.replace(/\$(IF|VAR)\d+/g, (match) => (
+        `<span style="background:rgba(251,191,36,0.16);color:var(--brand);border:1px solid rgba(251,191,36,0.28);border-radius:4px;padding:0 2px;font-weight:600;">${match}</span>`
+      ));
+    }
+
+    const templatePreviewHtml = computed(() => highlightTemplateVariables(editorJson.value));
 
     function filteredInterfaces(v) {
       const q = (ifVarSearch.value[v] || "").toLowerCase().trim();
@@ -191,6 +269,15 @@ export default {
       return [...new Set(matches.map(m => m[0]))].sort((a, b) => {
         const na = parseInt(a.replace("$IF", ""), 10);
         const nb = parseInt(b.replace("$IF", ""), 10);
+        return na - nb;
+      });
+    }
+
+    function extractTextVars(jsonText) {
+      const matches = [...jsonText.matchAll(/\$VAR\d+/g)];
+      return [...new Set(matches.map(m => m[0]))].sort((a, b) => {
+        const na = parseInt(a.replace("$VAR", ""), 10);
+        const nb = parseInt(b.replace("$VAR", ""), 10);
         return na - nb;
       });
     }
@@ -276,20 +363,27 @@ export default {
       try { JSON.parse(editorJson.value); }
       catch (e) { jsonError.value = `Invalid JSON: ${e.message}`; return; }
 
-      const vars = extractIfVars(editorJson.value);
-      if (vars.length > 0) {
-        ifVarList.value = vars;
-        ifVarSelections.value = Object.fromEntries(vars.map(v => [v, ""]));
-        ifVarSearch.value = Object.fromEntries(vars.map(v => [v, ""]));
-        ifVarLoading.value = true;
+      const ifVars = extractIfVars(editorJson.value);
+      const txtVars = extractTextVars(editorJson.value);
+      if (ifVars.length > 0 || txtVars.length > 0) {
+        ifVarList.value = ifVars;
+        textVarList.value = txtVars;
+        ifVarSelections.value = Object.fromEntries(ifVars.map(v => [v, ""]));
+        ifVarSearch.value = Object.fromEntries(ifVars.map(v => [v, ""]));
+        textVarValues.value = Object.fromEntries(txtVars.map(v => [v, ""]));
+        ifVarLoading.value = ifVars.length > 0;
         ifVarModal.value = true;
-        try {
-          const data = await api.get("/api/v1/interfaces");
-          availableInterfaces.value = Array.isArray(data) ? data : [];
-        } catch {
+        if (ifVars.length > 0) {
+          try {
+            const data = await api.get("/api/v1/interfaces");
+            availableInterfaces.value = Array.isArray(data) ? data : [];
+          } catch {
+            availableInterfaces.value = [];
+          } finally {
+            ifVarLoading.value = false;
+          }
+        } else {
           availableInterfaces.value = [];
-        } finally {
-          ifVarLoading.value = false;
         }
         return; // wait for user confirmation
       }
@@ -300,14 +394,37 @@ export default {
     async function confirmApplyWithVars() {
       ifVarModal.value = false;
       // replace longer variable names first to avoid partial matches ($IF10 before $IF1)
-      const sortedByLength = [...ifVarList.value].sort((a, b) => b.length - a.length);
+      const sortedByLength = [...ifVarList.value, ...textVarList.value].sort((a, b) => b.length - a.length);
       let jsonText = editorJson.value;
       for (const v of sortedByLength) {
-        jsonText = jsonText.replaceAll(v, ifVarSelections.value[v]);
+        const value = ifVarSelections.value[v] ?? textVarValues.value[v] ?? "";
+        jsonText = jsonText.replaceAll(v, value);
       }
       try { JSON.parse(jsonText); }
       catch (e) { jsonError.value = `JSON invalid after substitution: ${e.message}`; return; }
       await _doApply(jsonText);
+    }
+
+    function cancelStopAndReapply() {
+      applying.value = false;
+      stopAndReapplyModal.value = false;
+      stopAndReapplyPending.value = null;
+    }
+
+    async function confirmStopAndReapply() {
+      const pending = stopAndReapplyPending.value;
+      if (!pending?.name || !pending?.jsonText) return;
+      applying.value = true;
+      try {
+        await api.put(`/ui-api/instances/${encodeURIComponent(pending.name)}/reconfigure`, JSON.parse(pending.jsonText));
+        showToast(`Template applied to "${pending.name}"`);
+        stopAndReapplyModal.value = false;
+        stopAndReapplyPending.value = null;
+      } catch (e) {
+        showToast(`Apply failed: ${e.message}`, "error");
+      } finally {
+        applying.value = false;
+      }
     }
 
     async function _doApply(jsonText) {
@@ -316,9 +433,15 @@ export default {
         await api.put(`/api/v1/instances/${encodeURIComponent(applyTarget.value)}`, JSON.parse(jsonText));
         showToast(`Template applied to "${applyTarget.value}"`);
       } catch (e) {
+        if (e.status === 412) {
+          applying.value = false;
+          stopAndReapplyPending.value = { name: applyTarget.value, jsonText };
+          stopAndReapplyModal.value = true;
+          return;
+        }
         showToast(`Apply failed: ${e.message}`, "error");
       } finally {
-        applying.value = false;
+        if (!stopAndReapplyModal.value) applying.value = false;
       }
     }
 
@@ -335,7 +458,9 @@ export default {
       jsonError, saving, applying, applyTarget, instanceNames, toast,
       loadTemplate, createNew, formatJson, save, deleteTemplate, applyToInstance,
       ifVarModal, ifVarList, ifVarSelections, ifVarSearch, availableInterfaces, ifVarLoading,
-      ifVarSelectionsComplete, confirmApplyWithVars, filteredInterfaces,
+      textVarList, textVarValues,
+      ifVarSelectionsComplete, confirmApplyWithVars, filteredInterfaces, templatePreviewHtml,
+      stopAndReapplyModal, stopAndReapplyPending, cancelStopAndReapply, confirmStopAndReapply,
     };
   },
 };

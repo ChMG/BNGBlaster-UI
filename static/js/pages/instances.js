@@ -197,7 +197,7 @@ export default {
 
     <!-- Create/Edit Modal -->
     <dialog ref="modalRef" class="modal">
-      <div class="modal-box w-full max-w-2xl bg-base-200 relative">
+      <div :class="['modal-box w-full bg-base-200 relative', instIfVarModal ? 'max-w-4xl' : 'max-w-2xl']">
         <h3 class="font-bold text-lg mb-4">{{ editing ? 'Edit Instance' : 'New Instance' }}</h3>
 
         <div class="space-y-4">
@@ -245,41 +245,74 @@ export default {
         </div>
 
         <!-- Interface Variable Substitution (overlay inside modal-box) -->
-        <div v-if="instIfVarModal" class="absolute inset-0 rounded-2xl bg-base-200/95 backdrop-blur-sm flex flex-col p-6 overflow-y-auto">
-          <h3 class="font-bold text-lg mb-1">Interface Variables</h3>
-          <p class="text-sm text-base-content/50 mb-4">Select an interface for each placeholder found in the template.</p>
+        <div v-if="instIfVarModal" class="absolute inset-0 rounded-2xl bg-base-200/95 backdrop-blur-sm flex flex-col p-6 overflow-hidden">
+          <h3 class="font-bold text-lg mb-1">Template Variables</h3>
+          <p class="text-sm text-base-content/50 mb-4">Fill each placeholder found in the template ($IFn = interface, $VARn = free text).</p>
           <div v-if="instIfVarLoading" class="flex justify-center py-4">
             <span class="loading loading-dots loading-md brand-text"></span>
           </div>
-          <div v-else class="space-y-4 flex-1">
-            <div v-for="v in instIfVarList" :key="v" class="space-y-1">
-              <div class="flex items-center gap-2">
-                <div class="mono text-sm font-bold brand-text w-16 shrink-0">{{ v }}</div>
-                <div class="flex-1 relative">
+          <div v-else class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] gap-4 items-start flex-1 min-h-0 overflow-hidden">
+            <div class="space-y-3 min-w-0 min-h-0 overflow-auto pr-1">
+              <div v-if="instIfVarList.length" class="space-y-3">
+                <div class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">Interface variables</div>
+                <div v-for="v in instIfVarList" :key="v" class="space-y-1">
+                  <div class="flex items-center gap-2">
+                    <div class="mono text-sm font-bold brand-text w-16 shrink-0">{{ v }}</div>
+                    <div class="flex-1 relative">
+                      <input
+                        v-model="instIfVarSearch[v]"
+                        type="text"
+                        placeholder="Filter interfaces..."
+                        class="input input-bordered input-sm w-full bg-base-300 pr-6"
+                      />
+                      <button v-if="instIfVarSearch[v]" @click="instIfVarSearch[v] = ''"
+                        class="absolute right-2 top-1/2 -translate-y-1/2 text-base-content/30 hover:text-base-content text-xs">
+                        &#x2715;
+                      </button>
+                    </div>
+                  </div>
+                  <div class="pl-18">
+                    <select v-model="instIfVarSelections[v]" size="3"
+                      class="select select-bordered select-sm w-full bg-base-300 h-auto py-1">
+                      <option value="">&mdash; none &mdash;</option>
+                      <option v-for="itf in instFilteredInterfaces(v)" :key="itf.name" :value="itf.name">
+                        {{ itf.name }}{{ itf.mac ? '  (' + itf.mac + ')' : '' }}
+                      </option>
+                    </select>
+                    <div v-if="instIfVarSelections[v]" class="text-xs text-success mono mt-1 pl-1">
+                      &#x2713; {{ instIfVarSelections[v] }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="instTextVarList.length" class="space-y-2">
+                <div class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">Text variables</div>
+                <div v-for="v in instTextVarList" :key="v" class="space-y-1">
+                  <div class="mono text-sm font-bold brand-text">{{ v }}</div>
                   <input
-                    v-model="instIfVarSearch[v]"
+                    v-model="instTextVarValues[v]"
                     type="text"
-                    placeholder="Filter interfaces..."
-                    class="input input-bordered input-sm w-full bg-base-300 pr-6"
+                    placeholder="Enter value..."
+                    class="input input-bordered input-sm w-full bg-base-300"
                   />
-                  <button v-if="instIfVarSearch[v]" @click="instIfVarSearch[v] = ''"
-                    class="absolute right-2 top-1/2 -translate-y-1/2 text-base-content/30 hover:text-base-content text-xs">
-                    &#x2715;
-                  </button>
+                  <div v-if="instTextVarValues[v]" class="text-xs text-success mono pl-1">
+                    &#x2713; {{ instTextVarValues[v] }}
+                  </div>
                 </div>
               </div>
-              <div class="pl-18">
-                <select v-model="instIfVarSelections[v]" size="4"
-                  class="select select-bordered select-sm w-full bg-base-300 h-auto py-1">
-                  <option value="">&mdash; none &mdash;</option>
-                  <option v-for="itf in instFilteredInterfaces(v)" :key="itf.name" :value="itf.name">
-                    {{ itf.name }}{{ itf.mac ? '  (' + itf.mac + ')' : '' }}
-                  </option>
-                </select>
-                <div v-if="instIfVarSelections[v]" class="text-xs text-success mono mt-1 pl-1">
-                  &#x2713; {{ instIfVarSelections[v] }}
-                </div>
+
+              <div v-if="!instIfVarList.length && !instTextVarList.length" class="text-sm text-base-content/50">
+                No placeholders found.
               </div>
+            </div>
+
+            <div class="min-w-0 min-h-0 space-y-2 overflow-hidden">
+              <div class="flex items-center justify-between gap-3">
+                <div class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">Configuration preview</div>
+                <div class="text-[11px] text-base-content/40">Highlighted placeholders show where substitutions will happen.</div>
+              </div>
+              <pre class="bg-base-300 rounded-xl border border-base-300 p-3 text-xs mono overflow-auto h-full min-h-[16rem] max-h-[42vh] whitespace-pre-wrap break-words" v-html="instTemplatePreviewHtml"></pre>
             </div>
           </div>
           <div class="flex justify-end gap-2 pt-4 border-t border-base-300 mt-4">
@@ -715,12 +748,34 @@ export default {
     const instIfVarList       = ref([]);
     const instIfVarSelections = ref({});
     const instIfVarSearch     = ref({});
+    const instTextVarList     = ref([]);
+    const instTextVarValues   = ref({});
     const instIfVarLoading    = ref(false);
     const instIfVarRawJson    = ref("");
     const instIfVarSelectionsComplete = computed(
-      () => instIfVarList.value.length > 0 && instIfVarList.value.every(v => !!instIfVarSelections.value[v])
+      () => {
+        const ifComplete = instIfVarList.value.every(v => !!instIfVarSelections.value[v]);
+        const textComplete = instTextVarList.value.every(v => String(instTextVarValues.value[v] ?? "").trim() !== "");
+        return (instIfVarList.value.length + instTextVarList.value.length) > 0 && ifComplete && textComplete;
+      }
     );
     const instAvailableInterfaces = ref([]);
+
+    function escapeHtml(text) {
+      return String(text ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+
+    function highlightTemplateVariables(text) {
+      const escaped = escapeHtml(text);
+      return escaped.replace(/\$(IF|VAR)\d+/g, (match) => (
+        `<span style="background:rgba(251,191,36,0.16);color:var(--brand);border:1px solid rgba(251,191,36,0.28);border-radius:4px;padding:0 2px;font-weight:600;">${match}</span>`
+      ));
+    }
+
+    const instTemplatePreviewHtml = computed(() => highlightTemplateVariables(instIfVarRawJson.value));
 
     // stop-and-reapply modal for running instances
     const stopAndReapplyModal = ref(false);
@@ -755,6 +810,13 @@ export default {
       const matches = [...jsonText.matchAll(/\$IF\d+/g)];
       return [...new Set(matches.map(m => m[0]))].sort((a, b) => {
         return parseInt(a.replace("$IF", ""), 10) - parseInt(b.replace("$IF", ""), 10);
+      });
+    }
+
+    function _extractTextVars(jsonText) {
+      const matches = [...jsonText.matchAll(/\$VAR\d+/g)];
+      return [...new Set(matches.map(m => m[0]))].sort((a, b) => {
+        return parseInt(a.replace("$VAR", ""), 10) - parseInt(b.replace("$VAR", ""), 10);
       });
     }
 
@@ -1011,21 +1073,28 @@ export default {
         return;
       }
 
-      const vars = _extractIfVars(jsonText);
-      if (vars.length > 0) {
+      const ifVars = _extractIfVars(jsonText);
+      const textVars = _extractTextVars(jsonText);
+      if (ifVars.length > 0 || textVars.length > 0) {
         instIfVarRawJson.value = jsonText;
-        instIfVarList.value = vars;
-        instIfVarSelections.value = Object.fromEntries(vars.map(v => [v, ""]));
-        instIfVarSearch.value = Object.fromEntries(vars.map(v => [v, ""]));
-        instIfVarLoading.value = true;
+        instIfVarList.value = ifVars;
+        instTextVarList.value = textVars;
+        instIfVarSelections.value = Object.fromEntries(ifVars.map(v => [v, ""]));
+        instIfVarSearch.value = Object.fromEntries(ifVars.map(v => [v, ""]));
+        instTextVarValues.value = Object.fromEntries(textVars.map(v => [v, ""]));
+        instIfVarLoading.value = ifVars.length > 0;
         instIfVarModal.value = true;
-        try {
-          const data = await api.get("/api/v1/interfaces");
-          instAvailableInterfaces.value = Array.isArray(data) ? data : [];
-        } catch {
+        if (ifVars.length > 0) {
+          try {
+            const data = await api.get("/api/v1/interfaces");
+            instAvailableInterfaces.value = Array.isArray(data) ? data : [];
+          } catch {
+            instAvailableInterfaces.value = [];
+          } finally {
+            instIfVarLoading.value = false;
+          }
+        } else {
           instAvailableInterfaces.value = [];
-        } finally {
-          instIfVarLoading.value = false;
         }
         return;
       }
@@ -1039,10 +1108,12 @@ export default {
     function confirmApplyTemplateWithVars() {
       instIfVarModal.value = false;
       _cfgFetchGen++;  // discard any in-flight config.json fetch
-      const sortedByLength = [...instIfVarList.value].sort((a, b) => b.length - a.length);
+      const allVars = [...instIfVarList.value, ...instTextVarList.value];
+      const sortedByLength = allVars.sort((a, b) => b.length - a.length);
       let jsonText = instIfVarRawJson.value;
       for (const v of sortedByLength) {
-        jsonText = jsonText.replaceAll(v, instIfVarSelections.value[v]);
+        const value = instIfVarSelections.value[v] ?? instTextVarValues.value[v] ?? "";
+        jsonText = jsonText.replaceAll(v, value);
       }
       form.value.config = jsonText;
       form.value.jsonError = "";
@@ -1680,7 +1751,8 @@ export default {
       sessionInfoRef, sessionEditRef, sessionEdit,
       runningCount, stoppedCount,
       instIfVarModal, instIfVarList, instIfVarSelections, instIfVarSearch, instIfVarLoading,
-      instIfVarSelectionsComplete, instAvailableInterfaces, instFilteredInterfaces,
+      instTextVarList, instTextVarValues,
+      instIfVarSelectionsComplete, instAvailableInterfaces, instFilteredInterfaces, instTemplatePreviewHtml,
       stopAndReapplyModal, stopAndReapplyPending,
       formatCounterCell,
       loadAll, action, deleteInst, openCreate, openEdit, closeModal,

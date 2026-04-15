@@ -111,16 +111,21 @@ I) Backend status sidebar improvements
 - Optional version check compares against latest GitHub releases and colors versions (green current / red outdated).
 - Env controls: VERSION_CHECK_ENABLED, VERSION_CHECK_CACHE_SEC.
 
-J) Template interface variable substitution
+J) Template variable substitution
 - Templates can contain $IF1, $IF2, ... placeholders for interface names.
-- When applying a template: system detects $IF vars → dialog shows searchable interface selector for each variable.
-- Each variable can appear multiple times; all occurrences replaced with selected interface name.
+- Templates can contain $VAR1, $VAR2, ... placeholders for free-text values.
+- When applying a template: system detects placeholders and opens a "Template Variables" dialog.
+- $IF variables use searchable interface selectors; $VAR variables use free-text inputs.
+- The dialog shows a config preview and highlights all placeholders before substitution.
+- Each variable can appear multiple times; all occurrences are replaced with the chosen value.
 - Supported both in templates page and instance edit popup.
 
 K) Stop-apply-restart workflow for running instances
 - When editing a running instance, save triggers HTTP 412 (Precondition Failed).
 - Dialog asks: "Stop, apply config, and restart?"
 - "Yes" → stop → PUT config → start → running again with new config.
+- Applying a template to a running instance on the templates page now uses the same confirmation flow.
+- Template confirmation uses PUT /ui-api/instances/<name>/reconfigure.
 - Restart uses the last start options used for that instance (stored server-side via /ui-api/instance-start-options/<name>).
 - Manual start dialog also pre-fills from the same server-side stored options.
 - "No" → dialog closes, error displayed.

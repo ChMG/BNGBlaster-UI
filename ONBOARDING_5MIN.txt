@@ -32,8 +32,10 @@ BNG BLASTER UI - 5 MIN ONBOARDING
 - Selected backend stored in localStorage; all API calls routed via X-Bngblaster-Target header
 - X-Bngblaster-Target can be backend URL or 0-based index (from backend_urls)
 - Invalid X-Bngblaster-Target is rejected with HTTP 400; proxy only forwards to configured BACKEND_URLS
-- Template variables: $IF1, $IF2, ... in templates are replaced with selected interfaces (searchable dialog)
+- Template variables: $IF1, $IF2, ... use searchable interface selectors and $VAR1, $VAR2, ... use free-text inputs
+- Template apply dialogs show a config preview and highlight placeholders before substitution
 - Running instance edit: save triggers stop → apply → restart workflow with confirmation needed
+- Applying a template to a running instance uses the same stop → apply → restart confirmation flow
 - Restart-after-edit reuses last start options per instance from server-side storage (if available)
 - Manual start modal pre-fills saved start options per instance
 - Deleting an instance removes its saved start options from server state
