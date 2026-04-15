@@ -113,9 +113,11 @@ I) Backend status sidebar improvements
 
 J) Template variable substitution
 - Templates can contain $IF1, $IF2, ... placeholders for interface names.
+- Optional filter hint syntax: $IF1:eth pre-fills the search field with 'eth' when the dialog opens.
+  The hint is stripped from the label and the substitution replaces the full token ($IF1:eth → chosen interface).
 - Templates can contain $VAR1, $VAR2, ... placeholders for free-text values.
 - When applying a template: system detects placeholders and opens a "Template Variables" dialog.
-- $IF variables use searchable interface selectors; $VAR variables use free-text inputs.
+- $IF variables use searchable interface selectors (alphabetically sorted); $VAR variables use free-text inputs.
 - The dialog shows a config preview and highlights all placeholders before substitution.
 - Each variable can appear multiple times; all occurrences are replaced with the chosen value.
 - Supported both in templates page and instance edit popup.

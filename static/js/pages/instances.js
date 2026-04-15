@@ -257,7 +257,7 @@ export default {
                 <div class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">Interface variables</div>
                 <div v-for="v in instIfVarList" :key="v" class="space-y-1">
                   <div class="flex items-center gap-2">
-                    <div class="mono text-sm font-bold brand-text w-16 shrink-0">{{ v }}</div>
+                    <div class="mono text-sm font-bold brand-text w-16 shrink-0">{{ v.split(':')[0] }}</div>
                     <div class="flex-1 relative">
                       <input
                         v-model="instIfVarSearch[v]"
@@ -770,7 +770,7 @@ export default {
 
     function highlightTemplateVariables(text) {
       const escaped = escapeHtml(text);
-      return escaped.replace(/\$(IF|VAR)\d+/g, (match) => (
+      return escaped.replace(/\$(?:IF\d+(?::[a-zA-Z0-9_.\-]+)?|VAR\d+)/g, (match) => (
         `<span style="background:rgba(251,191,36,0.16);color:var(--brand);border:1px solid rgba(251,191,36,0.28);border-radius:4px;padding:0 2px;font-weight:600;">${match}</span>`
       ));
     }
@@ -807,9 +807,17 @@ export default {
     }
 
     function _extractIfVars(jsonText) {
-      const matches = [...jsonText.matchAll(/\$IF\d+/g)];
-      return [...new Set(matches.map(m => m[0]))].sort((a, b) => {
-        return parseInt(a.replace("$IF", ""), 10) - parseInt(b.replace("$IF", ""), 10);
+      const matches = [...jsonText.matchAll(/\$IF\d+(?::[a-zA-Z0-9_.\-]+)?/g)];
+      const seen = new Set();
+      const vars = [];
+      for (const m of matches) {
+        const base = m[0].split(":")[0];
+        if (!seen.has(base)) { seen.add(base); vars.push(m[0]); }
+      }
+      return vars.sort((a, b) => {
+        const na = parseInt(a.split(":")[0].replace("$IF", ""), 10);
+        const nb = parseInt(b.split(":")[0].replace("$IF", ""), 10);
+        return na - nb;
       });
     }
 
@@ -1080,14 +1088,14 @@ export default {
         instIfVarList.value = ifVars;
         instTextVarList.value = textVars;
         instIfVarSelections.value = Object.fromEntries(ifVars.map(v => [v, ""]));
-        instIfVarSearch.value = Object.fromEntries(ifVars.map(v => [v, ""]));
+        instIfVarSearch.value = Object.fromEntries(ifVars.map(v => [v, v.includes(":") ? v.split(":")[1] : ""]));
         instTextVarValues.value = Object.fromEntries(textVars.map(v => [v, ""]));
         instIfVarLoading.value = ifVars.length > 0;
         instIfVarModal.value = true;
         if (ifVars.length > 0) {
           try {
             const data = await api.get("/api/v1/interfaces");
-            instAvailableInterfaces.value = Array.isArray(data) ? data : [];
+            instAvailableInterfaces.value = Array.isArray(data) ? data.slice().sort((a, b) => (a.name || "").localeCompare(b.name || "")) : [];
           } catch {
             instAvailableInterfaces.value = [];
           } finally {

@@ -33,6 +33,7 @@ BNG BLASTER UI - 5 MIN ONBOARDING
 - X-Bngblaster-Target can be backend URL or 0-based index (from backend_urls)
 - Invalid X-Bngblaster-Target is rejected with HTTP 400; proxy only forwards to configured BACKEND_URLS
 - Template variables: $IF1, $IF2, ... use searchable interface selectors and $VAR1, $VAR2, ... use free-text inputs
+- Optional filter hint: $IF1:eth pre-fills the interface search with 'eth' on dialog open (hint is stripped from the label)
 - Template apply dialogs show a config preview and highlight placeholders before substitution
 - Running instance edit: save triggers stop → apply → restart workflow with confirmation needed
 - Applying a template to a running instance uses the same stop → apply → restart confirmation flow
