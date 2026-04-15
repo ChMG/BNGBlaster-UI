@@ -114,7 +114,11 @@ export default {
     });
 
     function normalizeFlags(flags) {
-      return Array.isArray(flags) ? flags : [];
+      if (!Array.isArray(flags)) return [];
+      return flags
+        .map((f) => String(f ?? ""))
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
     }
 
     async function load() {
@@ -122,7 +126,9 @@ export default {
       error.value = "";
       try {
         const data = await api.get("/api/v1/interfaces");
-        interfaces.value = Array.isArray(data) ? data : [];
+        interfaces.value = Array.isArray(data)
+          ? data.slice().sort((a, b) => (a?.name || "").localeCompare(b?.name || ""))
+          : [];
         lastUpdated.value = new Date().toLocaleTimeString("en-US");
       } catch (e) {
         error.value = `Failed to load interfaces: ${e.message}`;
