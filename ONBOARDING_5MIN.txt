@@ -45,12 +45,17 @@ BNG BLASTER UI - 5 MIN ONBOARDING
 - Manual cleanup trigger available: POST /ui-api/instance-start-options/_cleanup
 - Reconfigure API available: PUT /ui-api/instances/{name}/reconfigure (stop/apply/restart)
 - Optional version check colors sidebar versions (green current, red outdated)
+- Metrics Charts page (`/metrics-charts`) uses ECharts and supports:
+	- instance filter (`instance_name` label)
+	- time-window selection (1m/5m/15m/30m)
+	- always-visible global metrics: instances_running + instances_total
 
 6) Important data/config paths
 - Templates storage: config-templates/
 - Runtime state storage: state/ (includes instance-start-options.json)
 - OpenAPI spec used by explorer: static/bngblaster-controler-swagger.yaml
 - UI API OpenAPI spec: static/ui-api-swagger.yaml
+- Local chart runtime (offline): static/vendor/echarts.min.js
 - Full project handover: HANDOVER.txt
 - Explorer page can switch between both specs via API Source selector.
 

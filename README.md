@@ -11,6 +11,7 @@ Python-based web application for the BNG Blaster Controller with a modern single
 - Start dialog with optional logging/metric/report flags (each with conditional visibility)
 - **Server-side configuration templates with placeholder substitution** ($IF1, $IF2, ... for interfaces and $VAR1, $VAR2, ... for free text; optional filter hint via $IF1:eth syntax)
 - Metrics page for Prometheus text format
+- Metrics Charts page (ECharts) with instance filter and selectable time window
 - Technical API explorer based on the OpenAPI file
 - Command dialog and file downloads per instance
 - Stop-apply-restart workflow for updating running instances' configuration
@@ -34,11 +35,13 @@ Python-based web application for the BNG Blaster Controller with a modern single
 - `static/js/pages/instances.js`: instance lifecycle + session management UI
 - `static/js/pages/interfaces.js`: interfaces overview page
 - `static/js/pages/metrics.js`: metrics dashboard
+- `static/js/pages/metrics-charts.js`: ECharts-based metrics visualization (instance/time-window filters)
 - `static/js/pages/templates.js`: templates CRUD + apply to instance
 - `static/js/pages/explorer.js`: OpenAPI endpoint explorer
 - `static/bngblaster-controler-swagger.yaml`: OpenAPI spec consumed by explorer
 - `static/ui-api-swagger.yaml`: OpenAPI spec for internal `/ui-api/*` endpoints
 - `static/vendor/`: vendored frontend runtime dependencies
+	- Includes `echarts.min.js` for offline chart rendering (no CDN dependency)
 - `.vscode/launch.json`: VS Code debug configurations
 - `STYLE_GUIDE.md`: theming and rebranding guide (token-based color customization)
 
@@ -226,6 +229,8 @@ http://localhost:8080
 - Reconfigure endpoint is available via `PUT /ui-api/instances/{name}/reconfigure`.
 - The API explorer reads the OpenAPI spec from `static/bngblaster-controler-swagger.yaml`.
 - The API explorer can switch between controller spec and UI API spec (`static/ui-api-swagger.yaml`).
+- The `Metrics Charts` page supports filtering by `instance_name` label and a selectable visible time window.
+- `instances_running` and `instances_total` are always shown in Metrics Charts, independent of instance filter.
 
 Manual cleanup example:
 

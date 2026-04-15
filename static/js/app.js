@@ -5,6 +5,7 @@ import { createRouter, createWebHashHistory, RouterView, RouterLink, useRoute } 
 import InstancesPage from "./pages/instances.js";
 import InterfacesPage from "./pages/interfaces.js";
 import MetricsPage   from "./pages/metrics.js";
+import MetricsChartsPage from "./pages/metrics-charts.js";
 import TemplatesPage from "./pages/templates.js";
 import ExplorerPage  from "./pages/explorer.js";
 import { api, BACKEND_TARGET_STORAGE_KEY } from "./api.js";
@@ -18,6 +19,7 @@ const router = createRouter({
     { path: "/instances", component: InstancesPage },
     { path: "/interfaces", component: InterfacesPage },
     { path: "/metrics",   component: MetricsPage   },
+    { path: "/metrics-charts", component: MetricsChartsPage },
     { path: "/templates", component: TemplatesPage },
     { path: "/explorer",  component: ExplorerPage  },
   ],
@@ -29,6 +31,7 @@ const NAV = [
   { to: "/instances", label: "Instances",   icon: "⚡" },
   { to: "/interfaces", label: "Interfaces", icon: "🧩" },
   { to: "/metrics",   label: "Metrics",     icon: "📊" },
+  { to: "/metrics-charts", label: "Metric Charts", icon: "📈" },
   { to: "/templates", label: "Templates",   icon: "📋" },
   { to: "/explorer",  label: "API Explorer",icon: "🔍" },
 ];
@@ -74,7 +77,7 @@ const AppLayout = {
         <nav class="flex-1 p-2 space-y-0.5 overflow-auto">
           <RouterLink v-for="item in nav" :key="item.to" :to="item.to"
             class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors nav-item"
-            :class="currentPath.startsWith(item.to)
+            :class="isNavActive(item.to)
               ? 'nav-active font-semibold'
               : 'text-base-content/60 hover:bg-base-300 hover:text-base-content'">
             <span>{{ item.icon }}</span>
@@ -241,6 +244,11 @@ const AppLayout = {
       }
     }
 
+    function isNavActive(path) {
+      const cur = currentPath.value || "/";
+      return cur === path || cur.startsWith(path + "/");
+    }
+
     onMounted(() => {
       checkBackend();
       setInterval(checkBackend, 20000);
@@ -252,6 +260,7 @@ const AppLayout = {
       ctrlLatest, blasterLatest,
       backendUrl, backendTarget, backendOptions, selectedBackend,
       isMultiBackend, isProxied, currentPath, onBackendChange, backendOptionLabel,
+      isNavActive,
       versionClass, showLatestHint, ctrlUpToDate, blasterUpToDate,
       appVersionClass, showAppLatestHint, appLatest,
     };

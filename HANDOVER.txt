@@ -1,5 +1,5 @@
 BNG BLASTER UI - HANDOVER
-Last updated: 2026-04-12
+Last updated: 2026-04-15
 
 1) CURRENT STACK
 - Backend: Flask proxy/app in server.py
@@ -18,8 +18,10 @@ Last updated: 2026-04-12
   - Includes start-options modal, session table, session detail modal, session edit modal, polling
 - static/js/pages/interfaces.js
 - static/js/pages/metrics.js
+- static/js/pages/metrics-charts.js
 - static/js/pages/templates.js
 - static/js/pages/explorer.js
+- static/vendor/echarts.min.js (vendored frontend chart runtime for offline mode)
 - static/bngblaster-controler-swagger.yaml
 - static/ui-api-swagger.yaml
 - config-templates/ (server-side template JSON storage)
@@ -38,6 +40,13 @@ B) Runtime and tooling
   - Flask UI launch
   - Gunicorn single-worker launch
 - .gitignore added and tuned for Python/venv/editor artifacts.
+
+L) Metrics Charts page (ECharts)
+- New SPA page: static/js/pages/metrics-charts.js
+- Uses local vendored ECharts from static/vendor/echarts.min.js (no CDN required)
+- Supports instance filter via label instance_name
+- Supports selectable visible time window (1m, 5m, 15m, 30m)
+- instances_running and instances_total are always included regardless of selected instance
 
 C) Instances + Sessions enhancements
 - Session table and controls heavily improved.
