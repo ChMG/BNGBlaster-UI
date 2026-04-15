@@ -3,7 +3,7 @@
     "a10nsp": [
       {
         "__comment__": "PPPoE Server",
-        "interface": "$IF1"
+        "interface": "$IF1:veth"
       }
     ],
     "access": [
