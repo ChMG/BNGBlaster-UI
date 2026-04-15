@@ -53,24 +53,36 @@ Install guides for required backend components:
 
 ### Create Virtual Test Interfaces in WSL
 
-The following example creates a Linux bridge plus two veth pairs that can be used for BNG Blaster tests:
+The following example creates a Linux bridge plus 4 veth pairs that can be used for BNG Blaster tests:
 
 ```bash
 sudo ip link add br0 type bridge
 sudo ip link set br0 up
-sudo ip link add vethA type veth peer name vethA-peer
-sudo ip link add vethB type veth peer name vethB-peer
-sudo ip link set vethA-peer master br0
-sudo ip link set vethB-peer master br0
+sudo ip link add vethA type veth peer name x-vethA
+sudo ip link add vethB type veth peer name x-vethB
+sudo ip link add vethC type veth peer name x-vethC
+sudo ip link add vethD type veth peer name x-vethD
+sudo ip link set x-vethA master br0
+sudo ip link set x-vethB master br0
+sudo ip link set x-vethC master br0
+sudo ip link set x-vethD master br0
 sudo ip link set vethA up
-sudo ip link set vethA-peer up
+sudo ip link set x-vethA up
 sudo ip link set vethB up
-sudo ip link set vethB-peer up
+sudo ip link set x-vethB up
+sudo ip link set vethC up
+sudo ip link set x-vethC up
+sudo ip link set vethD up
+sudo ip link set x-vethD up
 sudo sysctl -w net.ipv6.conf.br0.disable_ipv6=1
 sudo sysctl -w net.ipv6.conf.vethA.disable_ipv6=1
-sudo sysctl -w net.ipv6.conf.vethA-peer.disable_ipv6=1
+sudo sysctl -w net.ipv6.conf.x-vethA.disable_ipv6=1
 sudo sysctl -w net.ipv6.conf.vethB.disable_ipv6=1
-sudo sysctl -w net.ipv6.conf.vethB-peer.disable_ipv6=1
+sudo sysctl -w net.ipv6.conf.x-vethB.disable_ipv6=1
+sudo sysctl -w net.ipv6.conf.vethC.disable_ipv6=1
+sudo sysctl -w net.ipv6.conf.x-vethC.disable_ipv6=1
+sudo sysctl -w net.ipv6.conf.vethD.disable_ipv6=1
+sudo sysctl -w net.ipv6.conf.x-vethD.disable_ipv6=1
 ```
 
 Notes:
