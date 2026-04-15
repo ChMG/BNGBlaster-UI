@@ -88,10 +88,16 @@ export default {
       <div>
         <h1 class="text-2xl font-bold text-base-content">Instances</h1>
         <p class="text-sm text-base-content/50 mt-0.5">
-          {{ instances.length }} instance(s) · Updated {{ lastUpdated }}
+          {{ filteredInstances.length }} of {{ instances.length }} instance(s) · Updated {{ lastUpdated }}
         </p>
       </div>
       <div class="flex items-center gap-2 flex-wrap">
+        <input
+          v-model="instanceSearch"
+          type="text"
+          placeholder="Search instances..."
+          class="input input-sm input-bordered bg-base-200 w-48"
+        />
         <label class="flex items-center gap-2 cursor-pointer select-none">
           <input type="checkbox" class="toggle toggle-sm toggle-success" v-model="autoOn" @change="onAutoChange" />
           <span class="text-sm text-base-content/70">Auto</span>
@@ -149,7 +155,7 @@ export default {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="inst in instances" :key="inst.name" class="hover">
+          <tr v-for="inst in filteredInstances" :key="inst.name" class="hover">
             <td>
               <button class="mono text-sm font-semibold brand-text hover:underline" @click="openDetail(inst)">
                 {{ inst.name }}
@@ -177,6 +183,11 @@ export default {
           <tr v-if="!loading && !instances.length">
             <td colspan="5" class="text-center text-base-content/30 py-10">
               No instances available. Create one with "+ New Instance".
+            </td>
+          </tr>
+          <tr v-if="!loading && instances.length && !filteredInstances.length">
+            <td colspan="5" class="text-center text-base-content/30 py-10">
+              No instances match search.
             </td>
           </tr>
           <tr v-if="loading && !instances.length">
@@ -689,6 +700,7 @@ export default {
 
   setup() {
     const instances   = ref([]);
+    const instanceSearch = ref("");
     const loading     = ref(false);
     const lastUpdated = ref("—");
     const autoOn      = ref(true);
@@ -1758,8 +1770,16 @@ export default {
       return templates.value.filter(t => t.name.toLowerCase().includes(q));
     });
 
+    const filteredInstances = computed(() => {
+      const q = instanceSearch.value.trim().toLowerCase();
+      const list = q
+        ? instances.value.filter(i => i.name.toLowerCase().includes(q))
+        : instances.value.slice();
+      return list.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+    });
+
     return {
-      instances, loading, lastUpdated, autoOn, intervalSec, toast,
+      instances, instanceSearch, filteredInstances, loading, lastUpdated, autoOn, intervalSec, toast,
       templates, templateSearchQuery, filteredTemplates, modalRef, startOptionsRef, editing, form, startOptions, startLoggingFlags, startMetricFlags, startReportFlags,
       detailRef, detailInst, cmdName, cmdArgs, cmdResult, downloadFiles,
       sessionsLoading, sessionsError, sessions, filteredSessions, sessionsUpdated,
