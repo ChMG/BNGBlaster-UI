@@ -18,6 +18,8 @@ services:
       VERSION_CHECK_CACHE_SEC: ${VERSION_CHECK_CACHE_SEC:-3600}
       START_OPTIONS_CLEANUP_ENABLED: ${START_OPTIONS_CLEANUP_ENABLED:-1}
       START_OPTIONS_CLEANUP_INTERVAL_SEC: ${START_OPTIONS_CLEANUP_INTERVAL_SEC:-300}
+      # Optional: add "Metric Grafana" menu entry in UI sidebar
+      METRIC_GRAFANA_URL: ${METRIC_GRAFANA_URL:-}
     # Linux compatibility for host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -75,14 +75,20 @@ const AppLayout = {
 
         <!-- Navigation -->
         <nav class="flex-1 p-2 space-y-0.5 overflow-auto">
-          <RouterLink v-for="item in nav" :key="item.to" :to="item.to"
+          <component
+            v-for="item in nav"
+            :key="item.to || item.href"
+            :is="item.external ? 'a' : 'RouterLink'"
+            v-bind="item.external
+              ? { href: item.href, target: '_blank', rel: 'noopener noreferrer' }
+              : { to: item.to }"
             class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors nav-item"
-            :class="isNavActive(item.to)
+            :class="!item.external && isNavActive(item.to)
               ? 'nav-active font-semibold'
               : 'text-base-content/60 hover:bg-base-300 hover:text-base-content'">
             <span>{{ item.icon }}</span>
             <span>{{ item.label }}</span>
-          </RouterLink>
+          </component>
         </nav>
 
         <!-- Backend status -->
@@ -138,9 +144,22 @@ const AppLayout = {
     const versionCheckEnabled = ref(false);
     const backendUrl = ref(`${window.location.origin}/api`);
     const backendTarget = ref("—");
+    const metricGrafanaUrl = ref("");
     const backendOptions = ref([]);
     const selectedBackend = ref("");
-    const nav        = NAV;
+    const nav = computed(() => {
+      const items = [...NAV];
+      if (metricGrafanaUrl.value) {
+        const insertIndex = items.findIndex((item) => item.to === "/metrics-charts");
+        const externalItem = { href: metricGrafanaUrl.value, label: "Metric Grafana", icon: "🪟", external: true };
+        if (insertIndex >= 0) {
+          items.splice(insertIndex + 1, 0, externalItem);
+        } else {
+          items.push(externalItem);
+        }
+      }
+      return items;
+    });
 
     const currentPath = computed(() => route.path ?? "/");
     const isMultiBackend = computed(() => backendOptions.value.length > 1);
@@ -159,6 +178,7 @@ const AppLayout = {
           ? info.app_version_status.up_to_date
           : null;
         versionCheckEnabled.value = !!info?.version_check_enabled;
+        metricGrafanaUrl.value = info?.metric_grafana_url || "";
         const urls = Array.isArray(info?.backend_urls) ? info.backend_urls : [];
         backendOptions.value = urls;
 
@@ -202,6 +222,7 @@ const AppLayout = {
         blasterLatest.value = "";
         ctrlUpToDate.value = null;
         blasterUpToDate.value = null;
+        metricGrafanaUrl.value = "";
         backendTarget.value = "—";
       }
     }

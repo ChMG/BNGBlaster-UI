@@ -1,0 +1,281 @@
+{
+  "id": null,
+  "uid": "bngblaster-interfaces-counters",
+  "title": "BNGBlaster Interface Counters",
+  "tags": ["bngblaster", "interfaces", "prometheus"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "style": "dark",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "iface_metric",
+        "type": "query",
+        "label": "Interface Metric",
+        "datasource": "Prometheus",
+        "query": "label_values({__name__=~\"interfaces_(rx|tx)_(bytes|packets)\"}, __name__)",
+        "includeAll": false,
+        "multi": false,
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "instance_name",
+        "type": "query",
+        "label": "Instance Name",
+        "datasource": "Prometheus",
+        "query": "label_values({__name__=~\"interfaces_(rx|tx)_(bytes|packets)\"}, instance_name)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "hostname",
+        "type": "query",
+        "label": "Hostname",
+        "datasource": "Prometheus",
+        "query": "label_values({__name__=~\"interfaces_(rx|tx)_(bytes|packets)\",instance_name=~\"$instance_name\"}, hostname)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "ifname",
+        "type": "query",
+        "label": "Interface Name",
+        "datasource": "Prometheus",
+        "query": "label_values({__name__=~\"interfaces_(rx|tx)_(bytes|packets)\",instance_name=~\"$instance_name\",hostname=~\"$hostname\"}, interface_name)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "iftype",
+        "type": "query",
+        "label": "Interface Type",
+        "datasource": "Prometheus",
+        "query": "label_values({__name__=~\"interfaces_(rx|tx)_(bytes|packets)\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"}, interface_type)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Interface Metric Names",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(count by (__name__) ({__name__=~\"interfaces_(rx|tx)_(bytes|packets)\"}))"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Series for Selected Metric",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count({__name__=\"$iface_metric\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\",interface_type=~\"$iftype\"})"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Instances Running",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(instances_running) or vector(0)"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Instances Total",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(instances_total) or vector(0)"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Selected Interface Metric",
+      "description": "Shows the metric selected in the variable bar above.",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{__name__=\"$iface_metric\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\",interface_type=~\"$iftype\"}",
+          "legendFormat": "{{instance_name}} {{interface_name}} {{interface_type}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Traffic-like Interface Metrics",
+      "description": "Automatic overview for rx/tx, bytes, packets, drops, errors if present.",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{__name__=~\"interfaces_(rx|tx)_(bytes|packets)\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\",interface_type=~\"$iftype\"}",
+          "legendFormat": "{{__name__}} {{instance_name}} {{interface_name}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Interface Metric Inventory",
+      "description": "Current interface-related metric names seen by Prometheus.",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 20 },
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count by (__name__) ({__name__=~\"interfaces_(rx|tx)_(bytes|packets)\"})",
+          "format": "table",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "text",
+      "title": "Hint",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 28 },
+      "options": {
+        "content": "If this dashboard is empty, start at least one instance with metric flag interfaces enabled and refresh after one scrape interval.",
+        "mode": "markdown"
+      }
+    }
+  ]
+}

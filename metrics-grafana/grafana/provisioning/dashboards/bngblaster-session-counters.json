@@ -1,0 +1,398 @@
+{
+  "id": null,
+  "uid": "bngblaster-session-counters",
+  "title": "BNGBlaster Session Counters",
+  "tags": ["bngblaster", "session_counters", "prometheus"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "style": "dark",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "instance_name",
+        "type": "query",
+        "label": "Instance Name",
+        "datasource": "Prometheus",
+        "query": "label_values(sessions, instance_name)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "hostname",
+        "type": "query",
+        "label": "Hostname",
+        "datasource": "Prometheus",
+        "query": "label_values(sessions{instance_name=~\"$instance_name\"}, hostname)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Sessions",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(sessions{instance_name=~\"$instance_name\",hostname=~\"$hostname\"})"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Established",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(sessions_established{instance_name=~\"$instance_name\",hostname=~\"$hostname\"})"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Terminated",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(sessions_terminated{instance_name=~\"$instance_name\",hostname=~\"$hostname\"})"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Flapped",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(sessions_flapped{instance_name=~\"$instance_name\",hostname=~\"$hostname\"})"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Established Max",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(sessions_established_max{instance_name=~\"$instance_name\",hostname=~\"$hostname\"})"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Setup Rate",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "avg(setup_rate{instance_name=~\"$instance_name\",hostname=~\"$hostname\"})"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Session Counters",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance_name) (sessions{instance_name=~\"$instance_name\",hostname=~\"$hostname\"})",
+          "legendFormat": "sessions {{instance_name}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (instance_name) (sessions_established{instance_name=~\"$instance_name\",hostname=~\"$hostname\"})",
+          "legendFormat": "established {{instance_name}}"
+        },
+        {
+          "refId": "C",
+          "expr": "sum by (instance_name) (sessions_terminated{instance_name=~\"$instance_name\",hostname=~\"$hostname\"})",
+          "legendFormat": "terminated {{instance_name}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Session Types",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance_name) (sessions_pppoe{instance_name=~\"$instance_name\",hostname=~\"$hostname\"})",
+          "legendFormat": "pppoe {{instance_name}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (instance_name) (sessions_ipoe{instance_name=~\"$instance_name\",hostname=~\"$hostname\"})",
+          "legendFormat": "ipoe {{instance_name}}"
+        },
+        {
+          "refId": "C",
+          "expr": "sum by (instance_name) (dhcp_sessions{instance_name=~\"$instance_name\",hostname=~\"$hostname\"})",
+          "legendFormat": "dhcp {{instance_name}}"
+        },
+        {
+          "refId": "D",
+          "expr": "sum by (instance_name) (dhcpv6_sessions{instance_name=~\"$instance_name\",hostname=~\"$hostname\"})",
+          "legendFormat": "dhcpv6 {{instance_name}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Setup Rate and Setup Time",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "setup_time.*"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "setup_rate.*"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ops"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "avg by (instance_name) (setup_rate{instance_name=~\"$instance_name\",hostname=~\"$hostname\"})",
+          "legendFormat": "setup_rate {{instance_name}}"
+        },
+        {
+          "refId": "B",
+          "expr": "avg by (instance_name) (setup_rate_avg{instance_name=~\"$instance_name\",hostname=~\"$hostname\"})",
+          "legendFormat": "setup_rate_avg {{instance_name}}"
+        },
+        {
+          "refId": "C",
+          "expr": "avg by (instance_name) (setup_rate_max{instance_name=~\"$instance_name\",hostname=~\"$hostname\"})",
+          "legendFormat": "setup_rate_max {{instance_name}}"
+        },
+        {
+          "refId": "D",
+          "expr": "avg by (instance_name) (setup_rate_min{instance_name=~\"$instance_name\",hostname=~\"$hostname\"})",
+          "legendFormat": "setup_rate_min {{instance_name}}"
+        },
+        {
+          "refId": "E",
+          "expr": "avg by (instance_name) (setup_time{instance_name=~\"$instance_name\",hostname=~\"$hostname\"})",
+          "legendFormat": "setup_time {{instance_name}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Traffic Flows Verification",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * sum by (instance_name) (session_traffic_flows_verified{instance_name=~\"$instance_name\",hostname=~\"$hostname\"}) / clamp_min(sum by (instance_name) (session_traffic_flows{instance_name=~\"$instance_name\",hostname=~\"$hostname\"}), 1)",
+          "legendFormat": "session verified % {{instance_name}}"
+        },
+        {
+          "refId": "B",
+          "expr": "100 * sum by (instance_name) (stream_traffic_flows_verified{instance_name=~\"$instance_name\",hostname=~\"$hostname\"}) / clamp_min(sum by (instance_name) (stream_traffic_flows{instance_name=~\"$instance_name\",hostname=~\"$hostname\"}), 1)",
+          "legendFormat": "stream verified % {{instance_name}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Session Metric Inventory",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 20 },
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count by (__name__) ({instance_name=~\"$instance_name\",hostname=~\"$hostname\",__name__=~\"sessions.*|dhcp_sessions.*|dhcpv6_sessions.*|setup_rate.*|setup_time|session_traffic_flows.*|stream_traffic_flows.*\"})",
+          "format": "table",
+          "instant": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: BNGBlaster Dashboards
+    orgId: 1
+    folder: BNGBlaster
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 10
+    options:
+      path: /etc/grafana/provisioning/dashboards

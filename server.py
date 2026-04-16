@@ -57,6 +57,24 @@ def _is_allowed_backend_url(url: str) -> bool:
     return True
 
 
+def _parse_external_http_url(raw: str) -> str:
+    """Validate optional external URL for UI links (http/https, no credentials)."""
+    value = (raw or "").strip()
+    if not value:
+        return ""
+    try:
+        p = urlsplit(value)
+    except Exception:
+        return ""
+    if p.scheme not in {"http", "https"}:
+        return ""
+    if not p.hostname:
+        return ""
+    if p.username or p.password:
+        return ""
+    return value
+
+
 def _load_app_version(base_dir: pathlib.Path) -> str:
     version_file = base_dir / "VERSION"
     try:
@@ -87,6 +105,7 @@ APP_VERSION_CHECK_URL = os.environ.get(
     "APP_VERSION_CHECK_URL",
     "https://github.com/ChMG/BNGBlaster-UI/blob/main/VERSION",
 )
+METRIC_GRAFANA_URL = _parse_external_http_url(os.environ.get("METRIC_GRAFANA_URL", ""))
 
 _HOP_BY_HOP = frozenset(
     {"connection", "keep-alive", "transfer-encoding", "te",
@@ -478,6 +497,7 @@ def backend_info():
         "version_check_enabled": VERSION_CHECK_ENABLED,
         "app_version": APP_VERSION,
         "app_version_check_enabled": APP_VERSION_CHECK_ENABLED,
+        "metric_grafana_url": METRIC_GRAFANA_URL,
     }
 
     if APP_VERSION_CHECK_ENABLED:

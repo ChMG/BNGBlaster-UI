@@ -1,0 +1,392 @@
+{
+  "id": null,
+  "uid": "bngblaster-a10nsp-interfaces",
+  "title": "BNGBlaster A10NSP Interfaces Counters",
+  "tags": ["bngblaster", "a10nsp_interfaces", "prometheus"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "style": "dark",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "instance_name",
+        "type": "query",
+        "label": "Instance Name",
+        "datasource": "Prometheus",
+        "query": "label_values(interfaces_rx_packets{interface_type=\"A10NSP\"}, instance_name)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "hostname",
+        "type": "query",
+        "label": "Hostname",
+        "datasource": "Prometheus",
+        "query": "label_values(interfaces_rx_packets{interface_type=\"A10NSP\",instance_name=~\"$instance_name\"}, hostname)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "ifname",
+        "type": "query",
+        "label": "Interface Name",
+        "datasource": "Prometheus",
+        "query": "label_values(interfaces_rx_packets{interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\"}, interface_name)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "metric",
+        "type": "query",
+        "label": "Metric",
+        "datasource": "Prometheus",
+        "query": "label_values({__name__=~\"interfaces_.*\",interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"}, __name__)",
+        "includeAll": false,
+        "multi": false,
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "RX pps",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(interfaces_rx_pps{interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"})"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "TX pps",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(interfaces_tx_pps{interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"})"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "RX kbps",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Kbits"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(interfaces_rx_kbps{interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"})"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "TX kbps",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Kbits"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(interfaces_tx_kbps{interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"})"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "RX Loss Packets",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(interfaces_rx_loss_packets_ipv4{interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"}) + sum(interfaces_rx_loss_packets_ipv6{interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"}) + sum(interfaces_rx_loss_packets_ipv6pd{interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"}) + sum(interfaces_rx_loss_packets_streams{interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"})"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Metric Names",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(count by (__name__) ({__name__=~\"interfaces_.*\",interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"}))"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "A10NSP Interface Throughput",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance_name, interface_name) (interfaces_rx_bytes{interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"})",
+          "legendFormat": "rx_bytes {{instance_name}} {{interface_name}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (instance_name, interface_name) (interfaces_tx_bytes{interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"})",
+          "legendFormat": "tx_bytes {{instance_name}} {{interface_name}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "A10NSP Interface Packet Rate",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance_name, interface_name) (interfaces_rx_pps{interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"})",
+          "legendFormat": "rx_pps {{instance_name}} {{interface_name}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (instance_name, interface_name) (interfaces_tx_pps{interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"})",
+          "legendFormat": "tx_pps {{instance_name}} {{interface_name}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "A10NSP Session/Stream Packet Counters",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance_name, interface_name) (interfaces_rx_packets_session_ipv4{interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"})",
+          "legendFormat": "rx session ipv4 {{instance_name}} {{interface_name}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (instance_name, interface_name) (interfaces_tx_packets_session_ipv4{interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"})",
+          "legendFormat": "tx session ipv4 {{instance_name}} {{interface_name}}"
+        },
+        {
+          "refId": "C",
+          "expr": "sum by (instance_name, interface_name) (interfaces_rx_packets_streams{interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"})",
+          "legendFormat": "rx streams {{instance_name}} {{interface_name}}"
+        },
+        {
+          "refId": "D",
+          "expr": "sum by (instance_name, interface_name) (interfaces_tx_packets_streams{interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"})",
+          "legendFormat": "tx streams {{instance_name}} {{interface_name}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Selected A10NSP Metric",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{__name__=\"$metric\",interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"}",
+          "legendFormat": "{{__name__}} {{instance_name}} {{interface_name}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "A10NSP Metric Inventory",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 20 },
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count by (__name__) ({__name__=~\"interfaces_.*\",interface_type=\"A10NSP\",instance_name=~\"$instance_name\",hostname=~\"$hostname\",interface_name=~\"$ifname\"})",
+          "format": "table",
+          "instant": true
+        }
+      ]
+    }
+  ]
+}

@@ -194,6 +194,7 @@ Gunicorn runtime options can be customized via environment variables:
 - `APP_VERSION_CHECK_ENABLED` (default: `1`)
 - `APP_VERSION_CHECK_CACHE_SEC` (default: `3600`, minimum: `60`)
 - `APP_VERSION_CHECK_URL` (default: `https://github.com/ChMG/BNGBlaster-UI/blob/main/VERSION`)
+- `METRIC_GRAFANA_URL` (optional: if set, shows a `Metric Grafana` menu entry that opens Grafana in a new browser tab/window)
 
 Application version is read from the `VERSION` file in project root (shown in sidebar Backend section).
 
@@ -208,6 +209,32 @@ http://localhost:8080
 - All frontend dependencies are loaded locally from `static/vendor/`.
 - There are no CDN, font, or JavaScript imports required for the UI.
 - You only need the local Python server and a reachable BNG Blaster Controller.
+
+## Monitoring with Prometheus + Grafana
+
+This project includes an optional **example monitoring setup** in the `metrics-grafana/` directory that provides:
+
+- **Prometheus**: Scrapes BNG Blaster metrics from the `/metrics` endpoint
+- **Grafana**: Visualizes metrics with pre-built dashboards for:
+  - Session counters (setup rate, established sessions, traffic flows)
+  - Interface counters (RX/TX bytes, packets, throughput, loss packets)
+  - Stream counters (per-flow traffic, loss, activity)
+  - And more...
+
+### Quick Start
+
+```bash
+cd metrics-grafana
+docker-compose up -d
+```
+
+Then access:
+- **Grafana**: http://localhost:3000 (admin/admin)
+- **Prometheus**: http://localhost:9090
+
+⚠️ **Note**: This is an example setup for demonstration purposes. For production use, refer to the `metrics-grafana/README.md` for security, persistence, and scalability recommendations.
+
+For details, see [metrics-grafana/README.md](./metrics-grafana/README.md).
 
 ## Notes
 
