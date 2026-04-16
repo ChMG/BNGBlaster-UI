@@ -13,7 +13,8 @@
       "console": "integratedTerminal",
       "justMyCode": true,
       "env": {
-        "BNGBLASTER_URL": "http://localhost:8001,http://127.0.0.1:8001"
+        "BNGBLASTER_URL": "http://localhost:8001,http://127.0.0.1:8001",
+        "METRIC_GRAFANA_URL": "http://localhost:3000"
       }
     },
     {
