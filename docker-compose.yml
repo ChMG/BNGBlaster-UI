@@ -20,6 +20,17 @@ services:
       START_OPTIONS_CLEANUP_INTERVAL_SEC: ${START_OPTIONS_CLEANUP_INTERVAL_SEC:-300}
       # Optional: add "Metric Grafana" menu entry in UI sidebar
       METRIC_GRAFANA_URL: ${METRIC_GRAFANA_URL:-}
+      # Optional: enable OpenID Connect login
+      OIDC_ENABLED: ${OIDC_ENABLED:-0}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_SCOPES: ${OIDC_SCOPES:-openid profile email}
+      OIDC_GROUPS_CLAIM: ${OIDC_GROUPS_CLAIM:-groups}
+      OIDC_ALLOWED_GROUPS: ${OIDC_ALLOWED_GROUPS:-}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-}
+      OIDC_POST_LOGOUT_REDIRECT_URI: ${OIDC_POST_LOGOUT_REDIRECT_URI:-}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:-}
     # Linux compatibility for host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"

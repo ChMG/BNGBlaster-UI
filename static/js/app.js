@@ -94,6 +94,11 @@ const AppLayout = {
         <!-- Backend status -->
         <div class="p-3 border-t border-base-300 space-y-1">
           <div class="text-11 text-base-content/40 uppercase tracking-widest">Backend</div>
+          <div v-if="oidcEnabled" class="text-10 text-base-content/30 mono break-all">
+            <span>auth:</span>
+            <span class="text-success">{{ oidcUserName }}</span>
+            <a href="/ui-api/auth/logout" class="ml-2 underline text-base-content/50 hover:text-base-content">logout</a>
+          </div>
           <div class="text-xs mono text-base-content/50 break-all">{{ backendUrl }}</div>
           <div class="text-10 text-base-content/30 mono break-all">
             <span>app:</span>
@@ -145,6 +150,8 @@ const AppLayout = {
     const backendUrl = ref(`${window.location.origin}/api`);
     const backendTarget = ref("—");
     const metricGrafanaUrl = ref("");
+    const oidcEnabled = ref(false);
+    const oidcUserName = ref("");
     const backendOptions = ref([]);
     const selectedBackend = ref("");
     const nav = computed(() => {
@@ -179,6 +186,8 @@ const AppLayout = {
           : null;
         versionCheckEnabled.value = !!info?.version_check_enabled;
         metricGrafanaUrl.value = info?.metric_grafana_url || "";
+        oidcEnabled.value = !!info?.oidc_enabled;
+        oidcUserName.value = info?.oidc_user?.name || info?.oidc_user?.preferred_username || info?.oidc_user?.email || "authenticated";
         const urls = Array.isArray(info?.backend_urls) ? info.backend_urls : [];
         backendOptions.value = urls;
 
@@ -223,6 +232,8 @@ const AppLayout = {
         ctrlUpToDate.value = null;
         blasterUpToDate.value = null;
         metricGrafanaUrl.value = "";
+        oidcEnabled.value = false;
+        oidcUserName.value = "";
         backendTarget.value = "—";
       }
     }
@@ -280,6 +291,7 @@ const AppLayout = {
       appVersion,
       ctrlLatest, blasterLatest,
       backendUrl, backendTarget, backendOptions, selectedBackend,
+      oidcEnabled, oidcUserName,
       isMultiBackend, isProxied, currentPath, onBackendChange, backendOptionLabel,
       isNavActive,
       versionClass, showLatestHint, ctrlUpToDate, blasterUpToDate,

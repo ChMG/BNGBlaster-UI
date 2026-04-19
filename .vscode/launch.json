@@ -14,7 +14,17 @@
       "justMyCode": true,
       "env": {
         "BNGBLASTER_URL": "http://localhost:8001,http://127.0.0.1:8001",
-        "METRIC_GRAFANA_URL": "http://localhost:3000"
+        "METRIC_GRAFANA_URL": "http://localhost:3000",
+        "OIDC_ENABLED": "1",
+        "OIDC_ISSUER_URL": "http://localhost:8090/realms/master",
+        "OIDC_CLIENT_ID": "bngblaster-ui",
+        "OIDC_CLIENT_SECRET": "W2kRFd0Tn2XlUpYItrWLIBA0TTXCy94N",
+        "OIDC_SCOPES": "openid profile email",
+        "OIDC_GROUPS_CLAIM": "groups",
+        "OIDC_ALLOWED_GROUPS": "bngblaster-user",
+        "OIDC_REDIRECT_URI": "http://localhost:8080/ui-api/auth/callback",
+        "OIDC_POST_LOGOUT_REDIRECT_URI": "http://localhost:8080/",
+        "APP_SECRET_KEY": "change-me-long-random-dev-secret"
       }
     },
     {
@@ -34,7 +44,18 @@
       "justMyCode": true,
       "env": {
         "BNGBLASTER_URL": "http://localhost:8001",
-        "BIND": "0.0.0.0:8080"
+        "BIND": "0.0.0.0:8080",
+        "METRIC_GRAFANA_URL": "http://localhost:3000",
+        "OIDC_ENABLED": "1",
+        "OIDC_ISSUER_URL": "http://localhost:8090/realms/master",
+        "OIDC_CLIENT_ID": "bngblaster-ui",
+        "OIDC_CLIENT_SECRET": "change-me",
+        "OIDC_SCOPES": "openid profile email",
+        "OIDC_GROUPS_CLAIM": "groups",
+        "OIDC_ALLOWED_GROUPS": "bngblaster-user",
+        "OIDC_REDIRECT_URI": "http://localhost:8080/ui-api/auth/callback",
+        "OIDC_POST_LOGOUT_REDIRECT_URI": "http://localhost:8080/",
+        "APP_SECRET_KEY": "change-me-long-random-dev-secret"
       }
     }
   ]

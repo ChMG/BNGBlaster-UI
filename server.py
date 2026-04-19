@@ -11,19 +11,22 @@ Defaults: port=8080, backend=http://localhost:8001
 """
 
 import json
+import html
 import os
 import pathlib
 import re
+import secrets
 import sys
 import threading
 import time
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 try:
-    from flask import Flask, abort, jsonify, request, send_from_directory, Response
+    from flask import Flask, abort, jsonify, request, send_from_directory, Response, redirect, session, url_for
+    from authlib.integrations.flask_client import OAuth
     import requests as req_lib
 except ImportError:
-    print("Run first: pip install flask requests", file=sys.stderr)
+    print("Run first: pip install flask requests Authlib", file=sys.stderr)
     sys.exit(1)
 
 # ─── Config ─────────────────────────────────────────────────────────────────
@@ -75,6 +78,39 @@ def _parse_external_http_url(raw: str) -> str:
     return value
 
 
+def _is_truthy(raw: str, default: bool = False) -> bool:
+    if raw is None:
+        return default
+    return str(raw).strip() not in {"", "0", "false", "False", "no", "NO", "off", "OFF"}
+
+
+def _safe_next_path(raw: str) -> str:
+    value = (raw or "").strip()
+    if not value:
+        return "/"
+    p = urlsplit(value)
+    # Prevent open redirects to other hosts/schemes.
+    if p.scheme or p.netloc:
+        return "/"
+    return value if value.startswith("/") else f"/{value}"
+
+
+def _parse_csv_set(raw: str) -> set[str]:
+    return {part.strip() for part in (raw or "").split(",") if part.strip()}
+
+
+def _extract_claim_value(payload: dict, claim_path: str):
+    current = payload
+    for part in (claim_path or "").split("."):
+        key = part.strip()
+        if not key:
+            continue
+        if not isinstance(current, dict) or key not in current:
+            return None
+        current = current.get(key)
+    return current
+
+
 def _load_app_version(base_dir: pathlib.Path) -> str:
     version_file = base_dir / "VERSION"
     try:
@@ -106,6 +142,16 @@ APP_VERSION_CHECK_URL = os.environ.get(
     "https://github.com/ChMG/BNGBlaster-UI/blob/main/VERSION",
 )
 METRIC_GRAFANA_URL = _parse_external_http_url(os.environ.get("METRIC_GRAFANA_URL", ""))
+OIDC_ENABLED = _is_truthy(os.environ.get("OIDC_ENABLED", "0"), default=False)
+OIDC_ISSUER_URL = (os.environ.get("OIDC_ISSUER_URL", "") or "").strip().rstrip("/")
+OIDC_CLIENT_ID = (os.environ.get("OIDC_CLIENT_ID", "") or "").strip()
+OIDC_CLIENT_SECRET = (os.environ.get("OIDC_CLIENT_SECRET", "") or "").strip()
+OIDC_SCOPES = (os.environ.get("OIDC_SCOPES", "openid profile email") or "openid profile email").strip()
+OIDC_REDIRECT_URI = (os.environ.get("OIDC_REDIRECT_URI", "") or "").strip()
+OIDC_POST_LOGOUT_REDIRECT_URI = (os.environ.get("OIDC_POST_LOGOUT_REDIRECT_URI", "") or "").strip()
+OIDC_GROUPS_CLAIM = (os.environ.get("OIDC_GROUPS_CLAIM", "groups") or "groups").strip()
+OIDC_ALLOWED_GROUPS = _parse_csv_set(os.environ.get("OIDC_ALLOWED_GROUPS", ""))
+APP_SECRET_KEY = (os.environ.get("APP_SECRET_KEY", "") or "").strip()
 
 _HOP_BY_HOP = frozenset(
     {"connection", "keep-alive", "transfer-encoding", "te",
@@ -114,6 +160,27 @@ _HOP_BY_HOP = frozenset(
 )
 
 app = Flask(__name__, static_folder=str(STATIC_DIR))
+app.secret_key = APP_SECRET_KEY or secrets.token_hex(32)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+)
+
+if OIDC_ENABLED and (not OIDC_ISSUER_URL or not OIDC_CLIENT_ID):
+    raise RuntimeError("OIDC is enabled, but OIDC_ISSUER_URL and OIDC_CLIENT_ID are not fully configured.")
+
+oauth = OAuth(app)
+oidc_client = None
+if OIDC_ENABLED:
+    register_kwargs = {
+        "name": "oidc",
+        "client_id": OIDC_CLIENT_ID,
+        "server_metadata_url": f"{OIDC_ISSUER_URL}/.well-known/openid-configuration",
+        "client_kwargs": {"scope": OIDC_SCOPES},
+    }
+    if OIDC_CLIENT_SECRET:
+        register_kwargs["client_secret"] = OIDC_CLIENT_SECRET
+    oidc_client = oauth.register(**register_kwargs)
 
 _STATE_LOCK = threading.Lock()
 _CLEANUP_START_LOCK = threading.Lock()
@@ -124,6 +191,132 @@ _version_cache: dict[str, dict] = {
     "blaster": {"value": None, "ts": 0.0},
     "app-ui": {"value": None, "ts": 0.0},
 }
+
+
+def _oidc_is_authenticated() -> bool:
+    if not OIDC_ENABLED:
+        return True
+    return bool(session.get("oidc_authenticated"))
+
+
+def _request_next_path() -> str:
+    qs = request.query_string.decode("utf-8", errors="replace") if request.query_string else ""
+    return f"{request.path}?{qs}" if qs else request.path
+
+
+def _build_login_url(next_path: str | None = None) -> str:
+    target = _safe_next_path(next_path or "/")
+    return f"/ui-api/auth/login?{urlencode({'next': target})}"
+
+
+def _oidc_redirect_uri() -> str:
+    if OIDC_REDIRECT_URI:
+        return OIDC_REDIRECT_URI
+    return url_for("oidc_callback", _external=True)
+
+
+def _oidc_post_logout_redirect_uri() -> str:
+    if OIDC_POST_LOGOUT_REDIRECT_URI:
+        return OIDC_POST_LOGOUT_REDIRECT_URI
+    return url_for("serve_spa", path="", _external=True)
+
+
+def _oidc_extract_groups(userinfo: dict) -> set[str]:
+    if not isinstance(userinfo, dict):
+        return set()
+    raw_groups = _extract_claim_value(userinfo, OIDC_GROUPS_CLAIM)
+    if raw_groups is None:
+        return set()
+    if isinstance(raw_groups, str):
+        return {raw_groups}
+    if isinstance(raw_groups, list):
+        return {str(v) for v in raw_groups if isinstance(v, (str, int, float))}
+    if isinstance(raw_groups, (int, float)):
+        return {str(raw_groups)}
+    return set()
+
+
+def _oidc_group_allowed(user_groups: set[str]) -> bool:
+    if not OIDC_ALLOWED_GROUPS:
+        return True
+    return bool(user_groups & OIDC_ALLOWED_GROUPS)
+
+
+def _is_public_path(path: str) -> bool:
+    if path.startswith("/ui-api/auth/"):
+        return True
+    if path in {"/favicon.ico", "/favicon.svg", "/theme.css"}:
+        return True
+    if path.startswith("/vendor/"):
+        return True
+    return False
+
+
+def _render_auth_error_page(title: str, message: str, details: list[str] | None = None, status: int = 403):
+        details_html = ""
+        if details:
+                items = "".join(
+                        f"<li class=\"text-sm text-base-content/70 mono break-all\">{html.escape(item)}</li>"
+                        for item in details
+                        if item
+                )
+                if items:
+                        details_html = f"""
+                        <div class=\"mt-4\">
+                            <p class=\"text-xs uppercase tracking-wider text-base-content/50\">Debug Details</p>
+                            <ul class=\"mt-2 space-y-1\">{items}</ul>
+                        </div>
+                        """
+
+        page = f"""<!doctype html>
+<html lang=\"en\" data-theme=\"light\">
+    <head>
+        <meta charset=\"UTF-8\" />
+        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />
+        <title>{html.escape(title)} - BNG Blaster Controller UI</title>
+        <link rel=\"icon\" type=\"image/x-icon\" href=\"/favicon.ico\" sizes=\"any\" />
+        <link rel=\"icon\" type=\"image/svg+xml\" href=\"/favicon.svg\" />
+        <link rel=\"shortcut icon\" href=\"/favicon.ico\" />
+        <link href=\"/vendor/daisyui-full.min.css\" rel=\"stylesheet\" />
+        <script src=\"/vendor/tailwindcss-cdn.js?v=2\"></script>
+        <link href=\"/theme.css\" rel=\"stylesheet\" />
+    </head>
+    <body class=\"page-bg text-base-content min-h-screen\">
+        <main class=\"min-h-screen flex items-center justify-center p-4\">
+            <section class=\"w-full max-w-2xl card bg-base-200 border border-base-300 shadow-lg\">
+                <div class=\"card-body\">
+                    <div class=\"badge badge-warning text-xs\">Authentication</div>
+                    <h1 class=\"card-title text-2xl mt-2\">{html.escape(title)}</h1>
+                    <p class=\"text-base text-base-content/70 mt-1\">{html.escape(message)}</p>
+                    {details_html}
+                    <div class=\"card-actions justify-end mt-6\">
+                        <a class=\"btn btn-primary\" href=\"/ui-api/auth/login?next=/&prompt=login\">Try Login Again</a>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </body>
+</html>
+"""
+        return Response(page, status=status, mimetype="text/html")
+
+
+@app.before_request
+def require_authentication_if_enabled():
+    if not OIDC_ENABLED:
+        return None
+
+    path = request.path or "/"
+    if _is_public_path(path):
+        return None
+
+    if _oidc_is_authenticated():
+        return None
+
+    login_url = _build_login_url(_request_next_path())
+    if path.startswith("/api/") or path == "/metrics" or path.startswith("/ui-api/"):
+        return jsonify({"error": "authentication required", "login_url": login_url}), 401
+    return redirect(login_url)
 
 
 # ─── Proxy ──────────────────────────────────────────────────────────────────
@@ -498,7 +691,13 @@ def backend_info():
         "app_version": APP_VERSION,
         "app_version_check_enabled": APP_VERSION_CHECK_ENABLED,
         "metric_grafana_url": METRIC_GRAFANA_URL,
+        "oidc_enabled": OIDC_ENABLED,
+        "oidc_authenticated": _oidc_is_authenticated(),
+        "oidc_groups_claim": OIDC_GROUPS_CLAIM,
+        "oidc_allowed_groups": sorted(OIDC_ALLOWED_GROUPS),
     }
+    if OIDC_ENABLED:
+        result["oidc_user"] = session.get("oidc_user", {})
 
     if APP_VERSION_CHECK_ENABLED:
         latest_app = _get_cached_remote_app_version(APP_VERSION_CHECK_URL)
@@ -532,6 +731,116 @@ def backend_info():
             }
 
     return jsonify(result)
+
+
+@app.route("/ui-api/auth/status", methods=["GET"])
+def oidc_status():
+    return jsonify(
+        {
+            "enabled": OIDC_ENABLED,
+            "authenticated": _oidc_is_authenticated(),
+            "user": session.get("oidc_user", {}) if OIDC_ENABLED else {},
+            "groups_claim": OIDC_GROUPS_CLAIM,
+            "allowed_groups": sorted(OIDC_ALLOWED_GROUPS),
+            "login_url": _build_login_url("/"),
+            "logout_url": "/ui-api/auth/logout",
+        }
+    )
+
+
+@app.route("/ui-api/auth/login", methods=["GET"])
+def oidc_login():
+    if not OIDC_ENABLED:
+        return jsonify({"error": "OIDC is not enabled"}), 404
+    if oidc_client is None:
+        return jsonify({"error": "OIDC client not initialized"}), 500
+
+    next_path = _safe_next_path(request.args.get("next", "/"))
+    session["oidc_next"] = next_path
+    prompt = (request.args.get("prompt", "") or "").strip()
+    if prompt:
+        return oidc_client.authorize_redirect(_oidc_redirect_uri(), prompt=prompt)
+    return oidc_client.authorize_redirect(_oidc_redirect_uri())
+
+
+@app.route("/ui-api/auth/callback", methods=["GET"])
+def oidc_callback():
+    if not OIDC_ENABLED:
+        return jsonify({"error": "OIDC is not enabled"}), 404
+    if oidc_client is None:
+        return jsonify({"error": "OIDC client not initialized"}), 500
+
+    try:
+        token = oidc_client.authorize_access_token()
+        userinfo = token.get("userinfo") if isinstance(token, dict) else None
+        if not isinstance(userinfo, dict):
+            # Fall back to UserInfo endpoint if available.
+            userinfo = oidc_client.userinfo(token=token)
+            if not isinstance(userinfo, dict):
+                userinfo = {}
+
+        app.logger.debug(
+            "OIDC userinfo claims: %s",
+            {k: v for k, v in userinfo.items()},
+        )
+        user_groups = _oidc_extract_groups(userinfo)
+        app.logger.debug(
+            "OIDC group check — extracted groups: %r  allowed: %r  claim: %r",
+            sorted(user_groups),
+            sorted(OIDC_ALLOWED_GROUPS),
+            OIDC_GROUPS_CLAIM,
+        )
+        if not _oidc_group_allowed(user_groups):
+            session.clear()
+            return _render_auth_error_page(
+                title="Access Denied",
+                message="Your account is authenticated, but not assigned to an allowed group.",
+                details=[
+                    f"Your groups: {sorted(user_groups)}",
+                    f"Allowed groups: {sorted(OIDC_ALLOWED_GROUPS)}",
+                    f"Groups claim used: {OIDC_GROUPS_CLAIM!r}",
+                    f"Available claims in userinfo: {sorted(userinfo.keys()) if isinstance(userinfo, dict) else []}",
+                ],
+                status=403,
+            )
+
+        session["oidc_authenticated"] = True
+        session["oidc_user"] = {
+            "sub": userinfo.get("sub"),
+            "name": userinfo.get("name") or userinfo.get("preferred_username") or userinfo.get("email") or "user",
+            "email": userinfo.get("email", ""),
+            "preferred_username": userinfo.get("preferred_username", ""),
+            "groups": sorted(user_groups),
+        }
+        if isinstance(token, dict) and token.get("id_token"):
+            session["oidc_id_token"] = token.get("id_token")
+    except Exception as exc:
+        return jsonify({"error": f"oidc callback failed: {exc}"}), 401
+
+    return redirect(_safe_next_path(session.pop("oidc_next", "/")))
+
+
+@app.route("/ui-api/auth/logout", methods=["GET"])
+def oidc_logout():
+    if not OIDC_ENABLED:
+        return redirect("/")
+
+    id_token_hint = session.get("oidc_id_token")
+    session.clear()
+
+    if oidc_client is not None:
+        try:
+            metadata = oidc_client.load_server_metadata()
+            end_session_endpoint = metadata.get("end_session_endpoint") if isinstance(metadata, dict) else None
+            if end_session_endpoint:
+                params = {"post_logout_redirect_uri": _oidc_post_logout_redirect_uri()}
+                if id_token_hint:
+                    params["id_token_hint"] = id_token_hint
+                return redirect(f"{end_session_endpoint}?{urlencode(params)}")
+        except Exception:
+            pass
+
+    return redirect(_oidc_post_logout_redirect_uri())
 
 
 @app.route("/ui-api/instance-start-options/<name>", methods=["GET"])
@@ -660,6 +969,7 @@ if __name__ == "__main__":
         BACKEND_URLS = _parse_backend_urls(sys.argv[2])
         BACKEND_URL = BACKEND_URLS[0]
     start_cleanup_worker()
+    app.logger.setLevel("DEBUG")
     print(f"UI:      http://localhost:{port}")
     print(f"Backend: {', '.join(BACKEND_URLS)}  (proxied)")
     print("Stop with Ctrl+C")

@@ -195,6 +195,16 @@ Gunicorn runtime options can be customized via environment variables:
 - `APP_VERSION_CHECK_CACHE_SEC` (default: `3600`, minimum: `60`)
 - `APP_VERSION_CHECK_URL` (default: `https://github.com/ChMG/BNGBlaster-UI/blob/main/VERSION`)
 - `METRIC_GRAFANA_URL` (optional: if set, shows a `Metric Grafana` menu entry that opens Grafana in a new browser tab/window)
+- `OIDC_ENABLED` (default: `0`; set to `1` to enable OpenID Connect login)
+- `OIDC_ISSUER_URL` (required when OIDC is enabled; issuer base URL)
+- `OIDC_CLIENT_ID` (required when OIDC is enabled)
+- `OIDC_CLIENT_SECRET` (optional for public clients, usually required for confidential clients)
+- `OIDC_SCOPES` (default: `openid profile email`)
+- `OIDC_GROUPS_CLAIM` (default: `groups`; claim path containing user groups)
+- `OIDC_ALLOWED_GROUPS` (optional comma-separated allowlist, e.g. `bngblaster-admin,noc` or `/bngblaster-admin,/noc` depending on IdP group path format)
+- `OIDC_REDIRECT_URI` (optional; default is auto-generated as `<app-url>/ui-api/auth/callback`)
+- `OIDC_POST_LOGOUT_REDIRECT_URI` (optional; default is app root URL)
+- `APP_SECRET_KEY` (recommended when OIDC is enabled; used to sign Flask session cookies)
 
 Application version is read from the `VERSION` file in project root (shown in sidebar Backend section).
 
@@ -203,6 +213,51 @@ Then open in the browser:
 ```text
 http://localhost:8080
 ```
+
+## Optional OpenID Connect Login
+
+You can protect the UI and all proxied endpoints with OpenID Connect.
+
+Behavior when enabled:
+
+- Unauthenticated users are redirected to the OIDC login flow.
+- API requests without session return `401` including a login URL.
+- After successful login, users are redirected back to the original page.
+- A logout link is shown in the sidebar backend section.
+- Optional group-based restriction can be enforced with `OIDC_ALLOWED_GROUPS`.
+
+Minimal example:
+
+```bash
+export OIDC_ENABLED=1
+export OIDC_ISSUER_URL="https://your-idp.example.com/realms/main"
+export OIDC_CLIENT_ID="bngblaster-ui"
+export OIDC_CLIENT_SECRET="your-client-secret"
+export OIDC_GROUPS_CLAIM="groups"
+export OIDC_ALLOWED_GROUPS="/bngblaster-admin"
+export APP_SECRET_KEY="change-me-to-a-long-random-secret"
+python3 server.py
+```
+
+Group restriction notes:
+
+- If `OIDC_ALLOWED_GROUPS` is empty, every successfully authenticated OIDC user is allowed.
+- If `OIDC_ALLOWED_GROUPS` is set, the user must have at least one matching group.
+- For Keycloak, configure a mapper of type `Group Membership` so groups are included in the selected claim.
+- If Keycloak mapper option `Full group path` is enabled, use values like `/bngblaster-user` in `OIDC_ALLOWED_GROUPS`.
+- If `Full group path` is disabled, use values like `bngblaster-user` (without leading slash).
+
+Access denied behavior:
+
+- If a user is authenticated but not in an allowed group, the UI shows a styled `Access Denied` page.
+- The page includes a `Try Login Again` button, which triggers a fresh IdP login (`prompt=login`) so another user can sign in.
+
+Auth endpoints:
+
+- `GET /ui-api/auth/login`
+- `GET /ui-api/auth/callback`
+- `GET /ui-api/auth/logout`
+- `GET /ui-api/auth/status`
 
 ## Offline Mode
 

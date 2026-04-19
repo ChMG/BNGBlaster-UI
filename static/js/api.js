@@ -23,6 +23,9 @@ async function _fetch(path, options = {}) {
   const ct = r.headers.get("content-type") || "";
   const body = ct.includes("application/json") ? await r.json() : await r.text();
   if (!r.ok) {
+    if (r.status === 401 && body && typeof body === "object" && body.login_url) {
+      window.location.href = body.login_url;
+    }
     const msg = typeof body === "string" ? body : JSON.stringify(body);
     throw Object.assign(new Error(msg || r.statusText), { status: r.status, body });
   }
