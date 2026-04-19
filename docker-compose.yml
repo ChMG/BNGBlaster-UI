@@ -7,9 +7,8 @@ services:
     ports:
       - "8080:8080"
     environment:
-      # Change if your BNG Blaster Controller runs elsewhere
-      BNGBLASTER_URL: ${BNGBLASTER_URL:-http://host.docker.internal:8001}
       BIND: 0.0.0.0:8080
+      CONFIG_FILE: /app/config.json
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
       GUNICORN_THREADS: ${GUNICORN_THREADS:-2}
       GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-30}
@@ -18,23 +17,11 @@ services:
       VERSION_CHECK_CACHE_SEC: ${VERSION_CHECK_CACHE_SEC:-3600}
       START_OPTIONS_CLEANUP_ENABLED: ${START_OPTIONS_CLEANUP_ENABLED:-1}
       START_OPTIONS_CLEANUP_INTERVAL_SEC: ${START_OPTIONS_CLEANUP_INTERVAL_SEC:-300}
-      # Optional: add "Metric Grafana" menu entry in UI sidebar
-      METRIC_GRAFANA_URL: ${METRIC_GRAFANA_URL:-}
-      # Optional: enable OpenID Connect login
-      OIDC_ENABLED: ${OIDC_ENABLED:-0}
-      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
-      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
-      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
-      OIDC_SCOPES: ${OIDC_SCOPES:-openid profile email}
-      OIDC_GROUPS_CLAIM: ${OIDC_GROUPS_CLAIM:-groups}
-      OIDC_ALLOWED_GROUPS: ${OIDC_ALLOWED_GROUPS:-}
-      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-}
-      OIDC_POST_LOGOUT_REDIRECT_URI: ${OIDC_POST_LOGOUT_REDIRECT_URI:-}
-      APP_SECRET_KEY: ${APP_SECRET_KEY:-}
     # Linux compatibility for host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
+      - ${BNGBLASTER_UI_CONFIG:-./config.json}:/app/config.json:ro
       - ./config-templates:/app/config-templates
       - ./state:/app/state
     healthcheck:

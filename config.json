@@ -1,0 +1,24 @@
+{
+    "bngblaster": [
+        {
+            "controller": "http://localhost:8001",
+            "grafana": "http://localhost:3000"
+        },
+        {
+            "controller": "http://127.0.0.1:8001",
+            "grafana": ""
+        }
+    ],
+    "oidc": {
+        "enabled": false,
+        "issuer_url": "http://localhost:8090/realms/master",
+        "client_id": "bngblaster-ui",
+        "client_secret": "W2kRFd0Tn2XlUpYItrWLIBA0TTXCy94N",
+        "scopes": "openid profile email",
+        "groups_claim": "groups",
+        "allowed_groups": "bngblaster-user",
+        "app_secret_key": "change-me-long-random-dev-secret",
+        "redirect_uri": "http://localhost:8080/ui-api/auth/callback",
+        "post_logout_redirect_uri": "http://localhost:8080/"
+    }
+}

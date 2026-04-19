@@ -110,7 +110,7 @@ python3 server.py
 Run with Gunicorn (recommended for non-debug usage):
 
 ```bash
-BNGBLASTER_URL=http://localhost:8001 gunicorn -c gunicorn.conf.py server:app
+CONFIG_FILE=./config.json gunicorn -c gunicorn.conf.py server:app
 ```
 
 Run with Docker Compose:
@@ -131,17 +131,13 @@ Check health status:
 docker compose ps
 ```
 
-Optional (custom backend URL):
+Optional (external config path):
 
 ```bash
-BNGBLASTER_URL=http://your-backend:8001 docker compose up --build -d
+BNGBLASTER_UI_CONFIG=/path/to/config.json docker compose up --build -d
 ```
 
-Multi-backend mode (comma-separated list):
-
-```bash
-BNGBLASTER_URL=http://bng1:8001,http://bng2:8001 python3 server.py
-```
+Multi-backend mode is configured via the `bngblaster` array in `config.json`.
 
 In multi-backend mode, the UI shows a backend selector and routes API calls to the selected target.
 
@@ -151,7 +147,7 @@ The Flask proxy forwards `/api/*` and `/metrics` to one selected backend target.
 
 - Default (no header): resolved default target (`backend_url` from `GET /ui-api/backend-info`)
 - Explicit target by URL: set header `X-Bngblaster-Target: http://bng2:8001`
-- Explicit target by index: set header `X-Bngblaster-Target: 1` (0-based index in `BNGBLASTER_URL` list)
+- Explicit target by index: set header `X-Bngblaster-Target: 1` (0-based index in `backend_urls` from `GET /ui-api/backend-info`)
 
 Examples:
 
@@ -174,10 +170,10 @@ curl -H "X-Bngblaster-Target: 1" \
 
 Tip: `GET /ui-api/backend-info` returns `backend_urls` and helps map index → URL.
 
-Optionally with custom port or backend URL:
+Optionally with custom port or config path:
 
 ```bash
-python3 server.py 8080 http://localhost:8001
+CONFIG_FILE=./config.json python3 server.py 8080
 ```
 
 Gunicorn runtime options can be customized via environment variables:
@@ -194,17 +190,11 @@ Gunicorn runtime options can be customized via environment variables:
 - `APP_VERSION_CHECK_ENABLED` (default: `1`)
 - `APP_VERSION_CHECK_CACHE_SEC` (default: `3600`, minimum: `60`)
 - `APP_VERSION_CHECK_URL` (default: `https://github.com/ChMG/BNGBlaster-UI/blob/main/VERSION`)
-- `METRIC_GRAFANA_URL` (optional: if set, shows a `Metric Grafana` menu entry that opens Grafana in a new browser tab/window)
-- `OIDC_ENABLED` (default: `0`; set to `1` to enable OpenID Connect login)
-- `OIDC_ISSUER_URL` (required when OIDC is enabled; issuer base URL)
-- `OIDC_CLIENT_ID` (required when OIDC is enabled)
-- `OIDC_CLIENT_SECRET` (optional for public clients, usually required for confidential clients)
-- `OIDC_SCOPES` (default: `openid profile email`)
-- `OIDC_GROUPS_CLAIM` (default: `groups`; claim path containing user groups)
-- `OIDC_ALLOWED_GROUPS` (optional comma-separated allowlist, e.g. `bngblaster-admin,noc` or `/bngblaster-admin,/noc` depending on IdP group path format)
-- `OIDC_REDIRECT_URI` (optional; default is auto-generated as `<app-url>/ui-api/auth/callback`)
-- `OIDC_POST_LOGOUT_REDIRECT_URI` (optional; default is app root URL)
-- `APP_SECRET_KEY` (recommended when OIDC is enabled; used to sign Flask session cookies)
+- `CONFIG_FILE` (optional, default: `./config.json`)
+
+Controller, Grafana and OIDC settings are loaded from `config.json`.
+Legacy env vars (`BNGBLASTER_URL`, `METRIC_GRAFANA_URL`, `OIDC_*`) are only used as fallback when no valid values are present in `config.json`.
+If the `oidc` block exists in `config.json`, OIDC is enabled automatically unless `"enabled": false` is set.
 
 Application version is read from the `VERSION` file in project root (shown in sidebar Backend section).
 
@@ -213,6 +203,53 @@ Then open in the browser:
 ```text
 http://localhost:8080
 ```
+
+## Runtime Configuration File
+
+Use `config.json` in project root for runtime configuration:
+
+```json
+{
+	"bngblaster": [
+		{
+			"controller": "http://localhost:8001",
+			"grafana": "http://localhost:3000"
+		},
+		{
+			"controller": "http://127.0.0.1:8001",
+			"grafana": ""
+		}
+	],
+	"oidc": {
+		"enabled": true,
+		"issuer_url": "http://localhost:8090/realms/master",
+		"client_id": "bngblaster-ui",
+		"client_secret": "change-me",
+		"scopes": "openid profile email",
+		"groups_claim": "groups",
+		"allowed_groups": "bngblaster-user",
+		"app_secret_key": "change-me-long-random-dev-secret",
+		"redirect_uri": "http://localhost:8080/ui-api/auth/callback",
+		"post_logout_redirect_uri": "http://localhost:8080/"
+	}
+}
+```
+
+VS Code launch configurations use this file via `CONFIG_FILE=${workspaceFolder}/config.json`.
+
+Docker Compose binds the runtime config read-only into the container:
+
+```yaml
+volumes:
+	- ${BNGBLASTER_UI_CONFIG:-./config.json}:/app/config.json:ro
+```
+
+Set `BNGBLASTER_UI_CONFIG` if the external config file lives outside the project root.
+
+Per-controller Grafana behavior:
+
+- Grafana URL is selected by active controller in the UI.
+- If a controller `grafana` value is empty, the `Metric Grafana` menu entry is hidden.
 
 ## Optional OpenID Connect Login
 
@@ -226,17 +263,18 @@ Behavior when enabled:
 - A logout link is shown in the sidebar backend section.
 - Optional group-based restriction can be enforced with `OIDC_ALLOWED_GROUPS`.
 
-Minimal example:
+Minimal config example:
 
-```bash
-export OIDC_ENABLED=1
-export OIDC_ISSUER_URL="https://your-idp.example.com/realms/main"
-export OIDC_CLIENT_ID="bngblaster-ui"
-export OIDC_CLIENT_SECRET="your-client-secret"
-export OIDC_GROUPS_CLAIM="groups"
-export OIDC_ALLOWED_GROUPS="/bngblaster-admin"
-export APP_SECRET_KEY="change-me-to-a-long-random-secret"
-python3 server.py
+```json
+"oidc": {
+	"enabled": true,
+	"issuer_url": "https://your-idp.example.com/realms/main",
+	"client_id": "bngblaster-ui",
+	"client_secret": "your-client-secret",
+	"groups_claim": "groups",
+	"allowed_groups": "/bngblaster-admin",
+	"app_secret_key": "change-me-to-a-long-random-secret"
+}
 ```
 
 Group restriction notes:
@@ -294,7 +332,7 @@ For details, see [metrics-grafana/README.md](./metrics-grafana/README.md).
 ## Notes
 
 - The Flask server proxies `/api/` and `/metrics` to the BNG Blaster Controller, which avoids CORS issues in the browser.
-- Outbound proxy targets are allowlisted to configured `BNGBLASTER_URL` entries only (HTTP/HTTPS, no credentials).
+- Outbound proxy targets are allowlisted to configured controller entries from `config.json` (HTTP/HTTPS, no credentials).
 - Invalid `X-Bngblaster-Target` values are rejected with HTTP 400 (no silent fallback).
 - Optional version check compares backend-reported versions with latest GitHub releases:
 	- Controller: https://github.com/rtbrick/bngblaster-controller/releases
@@ -334,5 +372,5 @@ curl -X PUT \
 
 - Install the VS Code Python extension.
 - Use the launch configuration `Python: Flask UI (server.py)` for breakpoint debugging.
-- Keep `BNGBLASTER_URL` in the launch config aligned with your backend.
+- Keep `config.json` aligned with your backend and OIDC setup.
 - For process behavior close to production, use `Python: Gunicorn (single worker)`.

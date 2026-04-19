@@ -93,8 +93,8 @@ F) Instance status/session refresh reliability fixes
   - Added drain-on-stop behavior: after stop/kill, session list is still refreshed briefly until list reaches 0 (or max attempts), then polling stops.
 
 G) Multi-backend support
-- BNGBLASTER_URL accepts a comma-separated list of backend URLs.
-- server.py parses list into BACKEND_URLS; default target is BACKEND_URLS[0].
+- config.json `bngblaster` accepts a list of backend controller objects.
+- server.py parses controller entries into BACKEND_URLS; default target is BACKEND_URLS[0].
 - Per-request routing: X-Bngblaster-Target header selects backend.
 - Header supports full URL (recommended) or 0-based index string.
 - Outbound targets are strictly allowlisted to BACKEND_URLS (HTTP/HTTPS only, no credentials).
@@ -109,7 +109,7 @@ G) Multi-backend support
 
 H) Docker support
 - Dockerfile: python:3.12-slim, installs requirements.txt, exposes 8080.
-- docker-compose.yml: service bngblaster-ui, healthcheck via Python urllib, volume config-templates.
+- docker-compose.yml: service bngblaster-ui, healthcheck via Python urllib, read-only external config mount at /app/config.json, volume config-templates.
 - .dockerignore added.
 - docker-compose.yml now also mounts ./state:/app/state for persisted runtime state.
 
@@ -164,9 +164,9 @@ K) Stop-apply-restart workflow for running instances
 - Dev:
   - python3 server.py
 - Gunicorn:
-  - BNGBLASTER_URL=http://localhost:8001 gunicorn -c gunicorn.conf.py server:app
+  - CONFIG_FILE=./config.json gunicorn -c gunicorn.conf.py server:app
 - Multi-backend:
-  - BNGBLASTER_URL=http://bng1:8001,http://bng2:8001 python3 server.py
+  - Add multiple controller entries to config.json, then run python3 server.py
 - Docker:
   - docker compose up --build -d
 - VS Code:

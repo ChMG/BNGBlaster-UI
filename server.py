@@ -99,6 +99,14 @@ def _parse_csv_set(raw: str) -> set[str]:
     return {part.strip() for part in (raw or "").split(",") if part.strip()}
 
 
+def _normalize_csv_input(raw) -> str:
+    if raw is None:
+        return ""
+    if isinstance(raw, list):
+        return ",".join(str(part).strip() for part in raw if str(part).strip())
+    return str(raw)
+
+
 def _extract_claim_value(payload: dict, claim_path: str):
     current = payload
     for part in (claim_path or "").split("."):
@@ -120,9 +128,58 @@ def _load_app_version(base_dir: pathlib.Path) -> str:
         return "dev"
 
 
-BACKEND_URLS = _parse_backend_urls(os.environ.get("BNGBLASTER_URL", "http://localhost:8001"))
-BACKEND_URL = BACKEND_URLS[0]
+def _load_json_config(path: pathlib.Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(raw, dict):
+            return raw
+        print(f"Warning: {path.name} must contain a JSON object; ignoring file", file=sys.stderr)
+        return {}
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"Warning: failed to read {path.name}: {exc}", file=sys.stderr)
+        return {}
+
+
+def _parse_backends_from_config(raw) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
+    if not isinstance(raw, list):
+        return result
+
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        controller = str(item.get("controller", "") or "").strip().rstrip("/")
+        if not _is_allowed_backend_url(controller):
+            continue
+        grafana = _parse_external_http_url(item.get("grafana", ""))
+        result.append({"controller": controller, "grafana": grafana})
+
+    if raw and not result:
+        print("Warning: No valid controller entries found in config.json:bngblaster", file=sys.stderr)
+    return result
+
+
 BASE_DIR = pathlib.Path(__file__).parent
+_config_file_raw = (os.environ.get("CONFIG_FILE", "") or "").strip()
+if _config_file_raw:
+    _config_path = pathlib.Path(_config_file_raw)
+    CONFIG_FILE = _config_path if _config_path.is_absolute() else (BASE_DIR / _config_path)
+else:
+    CONFIG_FILE = BASE_DIR / "config.json"
+RUNTIME_CONFIG = _load_json_config(CONFIG_FILE)
+
+_configured_backends = _parse_backends_from_config(RUNTIME_CONFIG.get("bngblaster"))
+if _configured_backends:
+    BACKEND_URLS = [entry["controller"] for entry in _configured_backends]
+    BACKEND_GRAFANA_URLS = {entry["controller"]: entry["grafana"] for entry in _configured_backends}
+else:
+    BACKEND_URLS = _parse_backend_urls(os.environ.get("BNGBLASTER_URL", "http://localhost:8001"))
+    _fallback_grafana = _parse_external_http_url(os.environ.get("METRIC_GRAFANA_URL", ""))
+    BACKEND_GRAFANA_URLS = {url: _fallback_grafana for url in BACKEND_URLS}
+
+BACKEND_URL = BACKEND_URLS[0]
 TEMPLATES_DIR = BASE_DIR / "config-templates"
 STATE_DIR = BASE_DIR / "state"
 START_OPTIONS_FILE = STATE_DIR / "instance-start-options.json"
@@ -141,17 +198,30 @@ APP_VERSION_CHECK_URL = os.environ.get(
     "APP_VERSION_CHECK_URL",
     "https://github.com/ChMG/BNGBlaster-UI/blob/main/VERSION",
 )
-METRIC_GRAFANA_URL = _parse_external_http_url(os.environ.get("METRIC_GRAFANA_URL", ""))
-OIDC_ENABLED = _is_truthy(os.environ.get("OIDC_ENABLED", "0"), default=False)
-OIDC_ISSUER_URL = (os.environ.get("OIDC_ISSUER_URL", "") or "").strip().rstrip("/")
-OIDC_CLIENT_ID = (os.environ.get("OIDC_CLIENT_ID", "") or "").strip()
-OIDC_CLIENT_SECRET = (os.environ.get("OIDC_CLIENT_SECRET", "") or "").strip()
-OIDC_SCOPES = (os.environ.get("OIDC_SCOPES", "openid profile email") or "openid profile email").strip()
-OIDC_REDIRECT_URI = (os.environ.get("OIDC_REDIRECT_URI", "") or "").strip()
-OIDC_POST_LOGOUT_REDIRECT_URI = (os.environ.get("OIDC_POST_LOGOUT_REDIRECT_URI", "") or "").strip()
-OIDC_GROUPS_CLAIM = (os.environ.get("OIDC_GROUPS_CLAIM", "groups") or "groups").strip()
-OIDC_ALLOWED_GROUPS = _parse_csv_set(os.environ.get("OIDC_ALLOWED_GROUPS", ""))
-APP_SECRET_KEY = (os.environ.get("APP_SECRET_KEY", "") or "").strip()
+
+_oidc_cfg = RUNTIME_CONFIG.get("oidc") if isinstance(RUNTIME_CONFIG.get("oidc"), dict) else {}
+if "enabled" in _oidc_cfg:
+    _oidc_enabled_raw = _oidc_cfg.get("enabled")
+elif _oidc_cfg:
+    _oidc_enabled_raw = True
+else:
+    _oidc_enabled_raw = os.environ.get("OIDC_ENABLED", "0")
+OIDC_ENABLED = _oidc_enabled_raw if isinstance(_oidc_enabled_raw, bool) else _is_truthy(_oidc_enabled_raw, default=False)
+OIDC_ISSUER_URL = str(_oidc_cfg.get("issuer_url", os.environ.get("OIDC_ISSUER_URL", "")) or "").strip().rstrip("/")
+OIDC_CLIENT_ID = str(_oidc_cfg.get("client_id", os.environ.get("OIDC_CLIENT_ID", "")) or "").strip()
+OIDC_CLIENT_SECRET = str(_oidc_cfg.get("client_secret", os.environ.get("OIDC_CLIENT_SECRET", "")) or "").strip()
+OIDC_SCOPES = str(_oidc_cfg.get("scopes", os.environ.get("OIDC_SCOPES", "openid profile email")) or "openid profile email").strip()
+OIDC_REDIRECT_URI = str(_oidc_cfg.get("redirect_uri", os.environ.get("OIDC_REDIRECT_URI", "")) or "").strip()
+OIDC_POST_LOGOUT_REDIRECT_URI = str(
+    _oidc_cfg.get("post_logout_redirect_uri", os.environ.get("OIDC_POST_LOGOUT_REDIRECT_URI", "")) or ""
+).strip()
+OIDC_GROUPS_CLAIM = str(_oidc_cfg.get("groups_claim", os.environ.get("OIDC_GROUPS_CLAIM", "groups")) or "groups").strip()
+OIDC_ALLOWED_GROUPS = _parse_csv_set(
+    _normalize_csv_input(_oidc_cfg.get("allowed_groups", os.environ.get("OIDC_ALLOWED_GROUPS", "")))
+)
+APP_SECRET_KEY = str(
+    _oidc_cfg.get("app_secret_key", RUNTIME_CONFIG.get("app_secret_key", os.environ.get("APP_SECRET_KEY", ""))) or ""
+).strip()
 
 _HOP_BY_HOP = frozenset(
     {"connection", "keep-alive", "transfer-encoding", "te",
@@ -683,6 +753,9 @@ def delete_template(name: str):
 
 @app.route("/ui-api/backend-info", methods=["GET"])
 def backend_info():
+    target = _resolve_selected_target(request.headers.get("X-Bngblaster-Target", ""), strict=True)
+    metric_grafana_url = BACKEND_GRAFANA_URLS.get(target or BACKEND_URL, "")
+
     result = {
         "backend_url": BACKEND_URL,
         "backend_urls": BACKEND_URLS,
@@ -690,7 +763,7 @@ def backend_info():
         "version_check_enabled": VERSION_CHECK_ENABLED,
         "app_version": APP_VERSION,
         "app_version_check_enabled": APP_VERSION_CHECK_ENABLED,
-        "metric_grafana_url": METRIC_GRAFANA_URL,
+        "metric_grafana_url": metric_grafana_url,
         "oidc_enabled": OIDC_ENABLED,
         "oidc_authenticated": _oidc_is_authenticated(),
         "oidc_groups_claim": OIDC_GROUPS_CLAIM,
@@ -709,7 +782,6 @@ def backend_info():
         }
 
     if VERSION_CHECK_ENABLED:
-        target = _resolve_selected_target(request.headers.get("X-Bngblaster-Target", ""), strict=True)
         if target is not None:
             current_ctrl, current_blaster = _fetch_current_backend_versions(target)
             latest_ctrl = _get_cached_latest_release("controller", "rtbrick/bngblaster-controller")
@@ -968,6 +1040,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         BACKEND_URLS = _parse_backend_urls(sys.argv[2])
         BACKEND_URL = BACKEND_URLS[0]
+        BACKEND_GRAFANA_URLS = {url: "" for url in BACKEND_URLS}
     start_cleanup_worker()
     app.logger.setLevel("DEBUG")
     print(f"UI:      http://localhost:{port}")
