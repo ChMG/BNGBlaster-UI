@@ -261,7 +261,7 @@ Behavior when enabled:
 - API requests without session return `401` including a login URL.
 - After successful login, users are redirected back to the original page.
 - A logout link is shown in the sidebar backend section.
-- Optional group-based restriction can be enforced with `OIDC_ALLOWED_GROUPS`.
+- Optional group-based or role-based restriction can be enforced with `OIDC_ALLOWED_GROUPS` and `OIDC_ALLOWED_ROLES`.
 
 Minimal config example:
 
@@ -273,15 +273,21 @@ Minimal config example:
 	"client_secret": "your-client-secret",
 	"groups_claim": "groups",
 	"allowed_groups": "/bngblaster-admin",
+	"roles_claim": "realm_access.roles",
+	"allowed_roles": "bngblaster-ui-user",
 	"app_secret_key": "change-me-to-a-long-random-secret"
 }
 ```
 
-Group restriction notes:
+Authorization restriction notes:
 
 - If `OIDC_ALLOWED_GROUPS` is empty, every successfully authenticated OIDC user is allowed.
 - If `OIDC_ALLOWED_GROUPS` is set, the user must have at least one matching group.
+- If `OIDC_ALLOWED_ROLES` is set, the user must have at least one matching role.
+- If both are set, a matching group or a matching role is sufficient.
 - For Keycloak, configure a mapper of type `Group Membership` so groups are included in the selected claim.
+- For Keycloak roles, the default roles claim path is `realm_access.roles`.
+- For client roles, use a nested claim path like `resource_access.bngblaster-ui.roles` in `roles_claim`.
 - If Keycloak mapper option `Full group path` is enabled, use values like `/bngblaster-user` in `OIDC_ALLOWED_GROUPS`.
 - If `Full group path` is disabled, use values like `bngblaster-user` (without leading slash).
 

@@ -219,6 +219,10 @@ OIDC_GROUPS_CLAIM = str(_oidc_cfg.get("groups_claim", os.environ.get("OIDC_GROUP
 OIDC_ALLOWED_GROUPS = _parse_csv_set(
     _normalize_csv_input(_oidc_cfg.get("allowed_groups", os.environ.get("OIDC_ALLOWED_GROUPS", "")))
 )
+OIDC_ROLES_CLAIM = str(_oidc_cfg.get("roles_claim", os.environ.get("OIDC_ROLES_CLAIM", "realm_access.roles")) or "realm_access.roles").strip()
+OIDC_ALLOWED_ROLES = _parse_csv_set(
+    _normalize_csv_input(_oidc_cfg.get("allowed_roles", os.environ.get("OIDC_ALLOWED_ROLES", "")))
+)
 APP_SECRET_KEY = str(
     _oidc_cfg.get("app_secret_key", RUNTIME_CONFIG.get("app_secret_key", os.environ.get("APP_SECRET_KEY", ""))) or ""
 ).strip()
@@ -291,25 +295,49 @@ def _oidc_post_logout_redirect_uri() -> str:
     return url_for("serve_spa", path="", _external=True)
 
 
-def _oidc_extract_groups(userinfo: dict) -> set[str]:
+def _oidc_extract_claim_set(userinfo: dict, claim_path: str) -> set[str]:
     if not isinstance(userinfo, dict):
         return set()
-    raw_groups = _extract_claim_value(userinfo, OIDC_GROUPS_CLAIM)
-    if raw_groups is None:
+    raw_value = _extract_claim_value(userinfo, claim_path)
+    if raw_value is None:
         return set()
-    if isinstance(raw_groups, str):
-        return {raw_groups}
-    if isinstance(raw_groups, list):
-        return {str(v) for v in raw_groups if isinstance(v, (str, int, float))}
-    if isinstance(raw_groups, (int, float)):
-        return {str(raw_groups)}
+    if isinstance(raw_value, str):
+        return {raw_value}
+    if isinstance(raw_value, list):
+        return {str(v) for v in raw_value if isinstance(v, (str, int, float))}
+    if isinstance(raw_value, (int, float)):
+        return {str(raw_value)}
     return set()
+
+
+def _oidc_extract_groups(userinfo: dict) -> set[str]:
+    return _oidc_extract_claim_set(userinfo, OIDC_GROUPS_CLAIM)
+
+
+def _oidc_extract_roles(userinfo: dict) -> set[str]:
+    return _oidc_extract_claim_set(userinfo, OIDC_ROLES_CLAIM)
 
 
 def _oidc_group_allowed(user_groups: set[str]) -> bool:
     if not OIDC_ALLOWED_GROUPS:
         return True
     return bool(user_groups & OIDC_ALLOWED_GROUPS)
+
+
+def _oidc_role_allowed(user_roles: set[str]) -> bool:
+    if not OIDC_ALLOWED_ROLES:
+        return True
+    return bool(user_roles & OIDC_ALLOWED_ROLES)
+
+
+def _oidc_user_allowed(user_groups: set[str], user_roles: set[str]) -> bool:
+    if not OIDC_ALLOWED_GROUPS and not OIDC_ALLOWED_ROLES:
+        return True
+    if OIDC_ALLOWED_GROUPS and user_groups & OIDC_ALLOWED_GROUPS:
+        return True
+    if OIDC_ALLOWED_ROLES and user_roles & OIDC_ALLOWED_ROLES:
+        return True
+    return False
 
 
 def _is_public_path(path: str) -> bool:
@@ -768,6 +796,8 @@ def backend_info():
         "oidc_authenticated": _oidc_is_authenticated(),
         "oidc_groups_claim": OIDC_GROUPS_CLAIM,
         "oidc_allowed_groups": sorted(OIDC_ALLOWED_GROUPS),
+        "oidc_roles_claim": OIDC_ROLES_CLAIM,
+        "oidc_allowed_roles": sorted(OIDC_ALLOWED_ROLES),
     }
     if OIDC_ENABLED:
         result["oidc_user"] = session.get("oidc_user", {})
@@ -814,6 +844,8 @@ def oidc_status():
             "user": session.get("oidc_user", {}) if OIDC_ENABLED else {},
             "groups_claim": OIDC_GROUPS_CLAIM,
             "allowed_groups": sorted(OIDC_ALLOWED_GROUPS),
+            "roles_claim": OIDC_ROLES_CLAIM,
+            "allowed_roles": sorted(OIDC_ALLOWED_ROLES),
             "login_url": _build_login_url("/"),
             "logout_url": "/ui-api/auth/logout",
         }
@@ -856,21 +888,31 @@ def oidc_callback():
             {k: v for k, v in userinfo.items()},
         )
         user_groups = _oidc_extract_groups(userinfo)
+        user_roles = _oidc_extract_roles(userinfo)
         app.logger.debug(
             "OIDC group check — extracted groups: %r  allowed: %r  claim: %r",
             sorted(user_groups),
             sorted(OIDC_ALLOWED_GROUPS),
             OIDC_GROUPS_CLAIM,
         )
-        if not _oidc_group_allowed(user_groups):
+        app.logger.debug(
+            "OIDC role check — extracted roles: %r  allowed: %r  claim: %r",
+            sorted(user_roles),
+            sorted(OIDC_ALLOWED_ROLES),
+            OIDC_ROLES_CLAIM,
+        )
+        if not _oidc_user_allowed(user_groups, user_roles):
             session.clear()
             return _render_auth_error_page(
                 title="Access Denied",
-                message="Your account is authenticated, but not assigned to an allowed group.",
+                message="Your account is authenticated, but not assigned to an allowed group or role.",
                 details=[
                     f"Your groups: {sorted(user_groups)}",
                     f"Allowed groups: {sorted(OIDC_ALLOWED_GROUPS)}",
                     f"Groups claim used: {OIDC_GROUPS_CLAIM!r}",
+                    f"Your roles: {sorted(user_roles)}",
+                    f"Allowed roles: {sorted(OIDC_ALLOWED_ROLES)}",
+                    f"Roles claim used: {OIDC_ROLES_CLAIM!r}",
                     f"Available claims in userinfo: {sorted(userinfo.keys()) if isinstance(userinfo, dict) else []}",
                 ],
                 status=403,
@@ -883,6 +925,7 @@ def oidc_callback():
             "email": userinfo.get("email", ""),
             "preferred_username": userinfo.get("preferred_username", ""),
             "groups": sorted(user_groups),
+            "roles": sorted(user_roles),
         }
         if isinstance(token, dict) and token.get("id_token"):
             session["oidc_id_token"] = token.get("id_token")

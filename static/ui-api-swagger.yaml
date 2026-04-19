@@ -11,6 +11,7 @@ tags:
   - name: templates
   - name: backend
   - name: start-options
+  - name: auth
 
 paths:
   /ui-api/templates:
@@ -103,6 +104,101 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BackendInfo'
+
+  /ui-api/auth/status:
+    get:
+      tags: [auth]
+      summary: Get OIDC authentication status and auth URLs
+      responses:
+        '200':
+          description: Authentication status payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthStatus'
+
+  /ui-api/auth/login:
+    get:
+      tags: [auth]
+      summary: Start OIDC login flow
+      description: >-
+        Starts the OIDC authorization redirect flow. Optional query parameters:
+        `next` for post-login target path and `prompt` (for example `login`)
+        to force fresh IdP authentication.
+      parameters:
+        - in: query
+          name: next
+          required: false
+          schema:
+            type: string
+          description: Relative path to return to after successful login.
+        - in: query
+          name: prompt
+          required: false
+          schema:
+            type: string
+          description: Optional OIDC prompt value passed to the IdP.
+      responses:
+        '302':
+          description: Redirect to OIDC provider authorization endpoint
+        '404':
+          description: OIDC not enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+        '500':
+          description: OIDC client not initialized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+
+  /ui-api/auth/callback:
+    get:
+      tags: [auth]
+      summary: OIDC callback endpoint
+      description: >-
+        Completes OIDC login, validates configured group/role allowlists, then
+        redirects back to the requested page.
+      responses:
+        '302':
+          description: Successful authentication and redirect to UI target page
+        '401':
+          description: OIDC callback failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+        '403':
+          description: Authenticated user is not allowed by configured groups/roles
+          content:
+            text/html:
+              schema:
+                type: string
+        '404':
+          description: OIDC not enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+        '500':
+          description: OIDC client not initialized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+
+  /ui-api/auth/logout:
+    get:
+      tags: [auth]
+      summary: Logout current OIDC session
+      description: >-
+        Clears local session and redirects to IdP logout endpoint (if available)
+        or to configured post-logout redirect URI.
+      responses:
+        '302':
+          description: Redirect after logout
 
   /ui-api/instance-start-options/{name}:
     parameters:
@@ -266,8 +362,28 @@ components:
             type: string
         multi_backend:
           type: boolean
+        metric_grafana_url:
+          type: string
         version_check_enabled:
           type: boolean
+        oidc_enabled:
+          type: boolean
+        oidc_authenticated:
+          type: boolean
+        oidc_groups_claim:
+          type: string
+        oidc_allowed_groups:
+          type: array
+          items:
+            type: string
+        oidc_roles_claim:
+          type: string
+        oidc_allowed_roles:
+          type: array
+          items:
+            type: string
+        oidc_user:
+          $ref: '#/components/schemas/OidcUser'
         version_status:
           type: object
           properties:
@@ -276,6 +392,55 @@ components:
             blaster:
               $ref: '#/components/schemas/VersionStatusEntry'
       required: [app_version, app_version_check_enabled, backend_url, backend_urls, multi_backend, version_check_enabled]
+
+    AuthStatus:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        authenticated:
+          type: boolean
+        user:
+          $ref: '#/components/schemas/OidcUser'
+        groups_claim:
+          type: string
+        allowed_groups:
+          type: array
+          items:
+            type: string
+        roles_claim:
+          type: string
+        allowed_roles:
+          type: array
+          items:
+            type: string
+        login_url:
+          type: string
+        logout_url:
+          type: string
+      required: [enabled, authenticated, user, groups_claim, allowed_groups, roles_claim, allowed_roles, login_url, logout_url]
+
+    OidcUser:
+      type: object
+      additionalProperties: true
+      properties:
+        sub:
+          type: string
+          nullable: true
+        name:
+          type: string
+        email:
+          type: string
+        preferred_username:
+          type: string
+        groups:
+          type: array
+          items:
+            type: string
+        roles:
+          type: array
+          items:
+            type: string
 
     AppVersionStatusEntry:
       type: object
