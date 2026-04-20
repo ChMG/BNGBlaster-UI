@@ -271,10 +271,12 @@ Minimal config example:
 	"issuer_url": "https://your-idp.example.com/realms/main",
 	"client_id": "bngblaster-ui",
 	"client_secret": "your-client-secret",
+	"bearer_enabled": true,
 	"groups_claim": "groups",
 	"allowed_groups": "/bngblaster-admin",
 	"roles_claim": "realm_access.roles",
 	"allowed_roles": "bngblaster-ui-user",
+	"jwks_cache_sec": 3600,
 	"app_secret_key": "change-me-to-a-long-random-secret"
 }
 ```
@@ -288,10 +290,38 @@ Authorization restriction notes:
 - For Keycloak, configure a mapper of type `Group Membership` so groups are included in the selected claim.
 - For Keycloak roles, the default roles claim path is `realm_access.roles`.
 - For client roles, use a nested claim path like `resource_access.bngblaster-ui.roles` in `roles_claim`.
+- For script/API usage without browser session, send `Authorization: Bearer <access-token>` and keep `bearer_enabled` set to `true`.
+- Bearer authentication is evaluated for all `/api/*` and `/ui-api/*` requests.
 - Ensure required group/role claims are available in the UserInfo response (`Add to userinfo = ON`).
 - In large production realms, avoid putting massive group/role lists into ID tokens (`Add to ID token = OFF` where possible) to prevent callback size/parser errors.
 - If Keycloak mapper option `Full group path` is enabled, use values like `/bngblaster-user` in `OIDC_ALLOWED_GROUPS`.
 - If `Full group path` is disabled, use values like `bngblaster-user` (without leading slash).
+
+Script example (no browser login):
+
+```bash
+# 1) Obtain access token (client credentials example)
+TOKEN=$(curl -sS \
+	-d "grant_type=client_credentials" \
+	-d "client_id=bngblaster-ui" \
+	-d "client_secret=your-client-secret" \
+	"https://your-idp.example.com/realms/main/protocol/openid-connect/token" \
+	| python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+
+# 2) Call protected UI API endpoint with Bearer token
+curl -sS \
+	-H "Authorization: Bearer $TOKEN" \
+	-H "Content-Type: application/json" \
+	-X PUT "http://localhost:8080/ui-api/instances/<name>/reconfigure" \
+	-d '{"interfaces": []}'
+```
+
+Important for Keycloak + `client_credentials`:
+
+- The token represents the client service account, not an end-user.
+- If `allowed_roles` is configured, assign the required role to the client service account in Keycloak.
+- Keycloak path: `Clients` -> `<client-id>` -> `Service account roles`.
+- Without matching service-account roles, bearer-token calls return `403 forbidden`.
 
 Access denied behavior:
 

@@ -23,8 +23,10 @@ import base64
 from urllib.parse import urlencode, urlsplit
 
 try:
-    from flask import Flask, abort, jsonify, request, send_from_directory, Response, redirect, session, url_for
+    from flask import Flask, abort, jsonify, request, send_from_directory, Response, redirect, session, url_for, g
     from authlib.integrations.flask_client import OAuth
+    from authlib.jose import jwt as jose_jwt
+    from authlib.jose.errors import JoseError
     import requests as req_lib
 except ImportError:
     print("Run first: pip install flask requests Authlib", file=sys.stderr)
@@ -233,6 +235,10 @@ OIDC_REDIRECT_URI = str(_oidc_cfg.get("redirect_uri", os.environ.get("OIDC_REDIR
 OIDC_POST_LOGOUT_REDIRECT_URI = str(
     _oidc_cfg.get("post_logout_redirect_uri", os.environ.get("OIDC_POST_LOGOUT_REDIRECT_URI", "")) or ""
 ).strip()
+_oidc_bearer_enabled_raw = _oidc_cfg.get("bearer_enabled", os.environ.get("OIDC_BEARER_ENABLED", "1"))
+OIDC_BEARER_ENABLED = (
+    _oidc_bearer_enabled_raw if isinstance(_oidc_bearer_enabled_raw, bool) else _is_truthy(_oidc_bearer_enabled_raw, default=True)
+)
 OIDC_GROUPS_CLAIM = str(_oidc_cfg.get("groups_claim", os.environ.get("OIDC_GROUPS_CLAIM", "groups")) or "groups").strip()
 OIDC_ALLOWED_GROUPS = _parse_csv_set(
     _normalize_csv_input(_oidc_cfg.get("allowed_groups", os.environ.get("OIDC_ALLOWED_GROUPS", "")))
@@ -240,6 +246,10 @@ OIDC_ALLOWED_GROUPS = _parse_csv_set(
 OIDC_ROLES_CLAIM = str(_oidc_cfg.get("roles_claim", os.environ.get("OIDC_ROLES_CLAIM", "realm_access.roles")) or "realm_access.roles").strip()
 OIDC_ALLOWED_ROLES = _parse_csv_set(
     _normalize_csv_input(_oidc_cfg.get("allowed_roles", os.environ.get("OIDC_ALLOWED_ROLES", "")))
+)
+OIDC_JWKS_CACHE_SEC = max(
+    60,
+    int(str(_oidc_cfg.get("jwks_cache_sec", os.environ.get("OIDC_JWKS_CACHE_SEC", "3600")) or "3600")),
 )
 APP_SECRET_KEY = str(
     _oidc_cfg.get("app_secret_key", RUNTIME_CONFIG.get("app_secret_key", os.environ.get("APP_SECRET_KEY", ""))) or ""
@@ -283,12 +293,26 @@ _version_cache: dict[str, dict] = {
     "blaster": {"value": None, "ts": 0.0},
     "app-ui": {"value": None, "ts": 0.0},
 }
+_OIDC_JWKS_CACHE_LOCK = threading.Lock()
+_oidc_jwks_cache: dict[str, dict] = {"jwks": {}, "ts": 0.0}
 
 
 def _oidc_is_authenticated() -> bool:
     if not OIDC_ENABLED:
         return True
+    if bool(getattr(g, "oidc_bearer_authenticated", False)):
+        return True
     return bool(session.get("oidc_authenticated"))
+
+
+def _oidc_current_user() -> dict:
+    if not OIDC_ENABLED:
+        return {}
+    user = session.get("oidc_user")
+    if isinstance(user, dict) and user:
+        return user
+    bearer_user = getattr(g, "oidc_bearer_user", None)
+    return bearer_user if isinstance(bearer_user, dict) else {}
 
 
 def _request_next_path() -> str:
@@ -343,6 +367,90 @@ def _oidc_claims_from_token_payload(token: dict | None) -> dict:
     return claims
 
 
+def _oidc_bearer_token_from_request() -> str:
+    auth_header = (request.headers.get("Authorization", "") or "").strip()
+    if not auth_header.lower().startswith("bearer "):
+        return ""
+    return auth_header[7:].strip()
+
+
+def _oidc_get_jwks() -> dict:
+    now = time.time()
+    with _OIDC_JWKS_CACHE_LOCK:
+        if now - float(_oidc_jwks_cache.get("ts", 0.0)) < OIDC_JWKS_CACHE_SEC:
+            cached = _oidc_jwks_cache.get("jwks")
+            return cached if isinstance(cached, dict) else {}
+
+    if oidc_client is None:
+        return {}
+    try:
+        metadata = oidc_client.load_server_metadata()
+        jwks_uri = metadata.get("jwks_uri") if isinstance(metadata, dict) else None
+        if not jwks_uri:
+            return {}
+        resp = req_lib.get(jwks_uri, timeout=10)
+        if not resp.ok:
+            return {}
+        jwks = resp.json()
+        if not isinstance(jwks, dict):
+            return {}
+    except Exception:
+        return {}
+
+    with _OIDC_JWKS_CACHE_LOCK:
+        _oidc_jwks_cache["jwks"] = jwks
+        _oidc_jwks_cache["ts"] = now
+    return jwks
+
+
+def _oidc_verify_bearer_token(token: str) -> dict:
+    if not token:
+        return {}
+    jwks = _oidc_get_jwks()
+    if not jwks:
+        return {}
+    try:
+        claims = jose_jwt.decode(token, jwks)
+        claims.validate(leeway=60)
+        payload = dict(claims)
+    except (JoseError, ValueError, TypeError):
+        return {}
+
+    issuer = str(payload.get("iss", "") or "").strip().rstrip("/")
+    if OIDC_ISSUER_URL and issuer != OIDC_ISSUER_URL:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _oidc_try_bearer_authentication() -> str:
+    if not OIDC_ENABLED or not OIDC_BEARER_ENABLED:
+        return "none"
+
+    bearer_token = _oidc_bearer_token_from_request()
+    if not bearer_token:
+        return "none"
+
+    claims = _oidc_verify_bearer_token(bearer_token)
+    if not claims:
+        return "invalid"
+
+    user_groups = _oidc_extract_groups(claims)
+    user_roles = _oidc_extract_roles(claims)
+    if not _oidc_user_allowed(user_groups, user_roles):
+        return "forbidden"
+
+    g.oidc_bearer_authenticated = True
+    g.oidc_bearer_user = {
+        "sub": claims.get("sub"),
+        "name": claims.get("name") or claims.get("preferred_username") or claims.get("email") or "token-user",
+        "email": claims.get("email", ""),
+        "preferred_username": claims.get("preferred_username", ""),
+        "groups": _limit_claim_values(user_groups),
+        "roles": _limit_claim_values(user_roles),
+    }
+    return "ok"
+
+
 def _oidc_redirect_uri() -> str:
     if OIDC_REDIRECT_URI:
         return OIDC_REDIRECT_URI
@@ -375,7 +483,21 @@ def _oidc_extract_groups(userinfo: dict) -> set[str]:
 
 
 def _oidc_extract_roles(userinfo: dict) -> set[str]:
-    return _oidc_extract_claim_set(userinfo, OIDC_ROLES_CLAIM)
+    roles = _oidc_extract_claim_set(userinfo, OIDC_ROLES_CLAIM)
+    if roles:
+        return roles
+
+    # Keycloak tokens often keep roles under one of these paths.
+    fallback_paths = [
+        "realm_access.roles",
+        f"resource_access.{OIDC_CLIENT_ID}.roles" if OIDC_CLIENT_ID else "",
+    ]
+    for claim_path in fallback_paths:
+        path = (claim_path or "").strip()
+        if not path or path == OIDC_ROLES_CLAIM:
+            continue
+        roles |= _oidc_extract_claim_set(userinfo, path)
+    return roles
 
 
 def _oidc_group_allowed(user_groups: set[str]) -> bool:
@@ -470,11 +592,20 @@ def require_authentication_if_enabled():
         return None
 
     path = request.path or "/"
+    bearer_result = _oidc_try_bearer_authentication()
+
     if _is_public_path(path):
         return None
 
     if _oidc_is_authenticated():
         return None
+
+    if bearer_result == "ok":
+        return None
+    if bearer_result == "forbidden":
+        return jsonify({"error": "forbidden: bearer token is not allowed"}), 403
+    if bearer_result == "invalid":
+        return jsonify({"error": "invalid bearer token"}), 401
 
     login_url = _build_login_url(_request_next_path())
     if path.startswith("/api/") or path == "/metrics" or path.startswith("/ui-api/"):
@@ -865,7 +996,7 @@ def backend_info():
         "oidc_allowed_roles": sorted(OIDC_ALLOWED_ROLES),
     }
     if OIDC_ENABLED:
-        result["oidc_user"] = session.get("oidc_user", {})
+        result["oidc_user"] = _oidc_current_user()
 
     if APP_VERSION_CHECK_ENABLED:
         latest_app = _get_cached_remote_app_version(APP_VERSION_CHECK_URL)
@@ -906,7 +1037,7 @@ def oidc_status():
         {
             "enabled": OIDC_ENABLED,
             "authenticated": _oidc_is_authenticated(),
-            "user": session.get("oidc_user", {}) if OIDC_ENABLED else {},
+            "user": _oidc_current_user() if OIDC_ENABLED else {},
             "groups_claim": OIDC_GROUPS_CLAIM,
             "allowed_groups": sorted(OIDC_ALLOWED_GROUPS),
             "roles_claim": OIDC_ROLES_CLAIM,
