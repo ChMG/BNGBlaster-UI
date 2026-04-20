@@ -1026,7 +1026,10 @@ def oidc_logout():
             metadata = oidc_client.load_server_metadata()
             end_session_endpoint = metadata.get("end_session_endpoint") if isinstance(metadata, dict) else None
             if end_session_endpoint:
-                params = {"post_logout_redirect_uri": _oidc_post_logout_redirect_uri()}
+                params = {
+                    "post_logout_redirect_uri": _oidc_post_logout_redirect_uri(),
+                    "client_id": OIDC_CLIENT_ID,
+                }
                 if id_token_hint:
                     params["id_token_hint"] = id_token_hint
                 return redirect(f"{end_session_endpoint}?{urlencode(params)}")
