@@ -19,6 +19,7 @@ import secrets
 import sys
 import threading
 import time
+import base64
 from urllib.parse import urlencode, urlsplit
 
 try:
@@ -117,6 +118,23 @@ def _extract_claim_value(payload: dict, claim_path: str):
             return None
         current = current.get(key)
     return current
+
+
+def _decode_jwt_payload_unverified(raw_token: str) -> dict:
+    token_value = str(raw_token or "").strip()
+    if not token_value:
+        return {}
+    parts = token_value.split(".")
+    if len(parts) < 2:
+        return {}
+
+    payload_segment = parts[1].encode("ascii", errors="ignore")
+    payload_segment += b"=" * (-len(payload_segment) % 4)
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(payload_segment).decode("utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def _load_app_version(base_dir: pathlib.Path) -> str:
@@ -307,6 +325,22 @@ def _oidc_fetch_access_token_without_id_token_parse() -> tuple[dict, dict]:
     token = oidc_client.fetch_access_token(**params)
     oidc_client.token = token
     return token, state_data or {}
+
+
+def _oidc_claims_from_token_payload(token: dict | None) -> dict:
+    if not isinstance(token, dict):
+        return {}
+
+    claims: dict = {}
+    access_token_claims = _decode_jwt_payload_unverified(token.get("access_token", ""))
+    if access_token_claims:
+        claims.update(access_token_claims)
+
+    id_token_claims = _decode_jwt_payload_unverified(token.get("id_token", ""))
+    if id_token_claims:
+        claims.update(id_token_claims)
+
+    return claims
 
 
 def _oidc_redirect_uri() -> str:
@@ -905,12 +939,21 @@ def oidc_callback():
         # ID token payloads (for example many role/group claims), which can hit
         # parser size limits. Claims are read from userinfo below.
         token, _state_data = _oidc_fetch_access_token_without_id_token_parse()
+        token_payload_claims = _oidc_claims_from_token_payload(token)
         userinfo = token.get("userinfo") if isinstance(token, dict) else None
         if not isinstance(userinfo, dict):
             # Fall back to UserInfo endpoint if available.
-            userinfo = oidc_client.userinfo(token=token)
+            try:
+                userinfo = oidc_client.userinfo(token=token)
+            except Exception as exc:
+                app.logger.warning("OIDC userinfo request failed, falling back to token payload claims: %s", exc)
+                userinfo = {}
             if not isinstance(userinfo, dict):
                 userinfo = {}
+        if token_payload_claims:
+            merged_userinfo = dict(token_payload_claims)
+            merged_userinfo.update(userinfo)
+            userinfo = merged_userinfo
 
         app.logger.debug(
             "OIDC userinfo claims: %s",
