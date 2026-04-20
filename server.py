@@ -283,6 +283,32 @@ def _build_login_url(next_path: str | None = None) -> str:
     return f"/ui-api/auth/login?{urlencode({'next': target})}"
 
 
+def _oidc_fetch_access_token_without_id_token_parse() -> tuple[dict, dict]:
+    if request.method == "GET":
+        error = request.args.get("error")
+        if error:
+            description = request.args.get("error_description")
+            raise RuntimeError(f"{error}: {description}" if description else str(error))
+        params = {
+            "code": request.args.get("code"),
+            "state": request.args.get("state"),
+        }
+    else:
+        params = {
+            "code": request.form.get("code"),
+            "state": request.form.get("state"),
+        }
+
+    state = params.get("state")
+    state_data = oidc_client.framework.get_state_data(session, state) if oidc_client is not None else None
+    if oidc_client is not None:
+        oidc_client.framework.clear_state_data(session, state)
+    params = oidc_client._format_state_params(state_data, params)
+    token = oidc_client.fetch_access_token(**params)
+    oidc_client.token = token
+    return token, state_data or {}
+
+
 def _oidc_redirect_uri() -> str:
     if OIDC_REDIRECT_URI:
         return OIDC_REDIRECT_URI
@@ -875,7 +901,10 @@ def oidc_callback():
         return jsonify({"error": "OIDC client not initialized"}), 500
 
     try:
-        token = oidc_client.authorize_access_token()
+        # Avoid id_token parsing here because some providers may issue very large
+        # ID token payloads (for example many role/group claims), which can hit
+        # parser size limits. Claims are read from userinfo below.
+        token, _state_data = _oidc_fetch_access_token_without_id_token_parse()
         userinfo = token.get("userinfo") if isinstance(token, dict) else None
         if not isinstance(userinfo, dict):
             # Fall back to UserInfo endpoint if available.

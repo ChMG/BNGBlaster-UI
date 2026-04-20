@@ -288,6 +288,8 @@ Authorization restriction notes:
 - For Keycloak, configure a mapper of type `Group Membership` so groups are included in the selected claim.
 - For Keycloak roles, the default roles claim path is `realm_access.roles`.
 - For client roles, use a nested claim path like `resource_access.bngblaster-ui.roles` in `roles_claim`.
+- Ensure required group/role claims are available in the UserInfo response (`Add to userinfo = ON`).
+- In large production realms, avoid putting massive group/role lists into ID tokens (`Add to ID token = OFF` where possible) to prevent callback size/parser errors.
 - If Keycloak mapper option `Full group path` is enabled, use values like `/bngblaster-user` in `OIDC_ALLOWED_GROUPS`.
 - If `Full group path` is disabled, use values like `bngblaster-user` (without leading slash).
 
