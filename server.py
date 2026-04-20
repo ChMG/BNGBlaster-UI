@@ -400,6 +400,11 @@ def _oidc_user_allowed(user_groups: set[str], user_roles: set[str]) -> bool:
     return False
 
 
+def _limit_claim_values(values: set[str], limit: int = 20) -> list[str]:
+    # Keep session payload small (Flask session is cookie-based by default).
+    return sorted(values)[:limit]
+
+
 def _is_public_path(path: str) -> bool:
     if path.startswith("/ui-api/auth/"):
         return True
@@ -996,11 +1001,12 @@ def oidc_callback():
             "name": userinfo.get("name") or userinfo.get("preferred_username") or userinfo.get("email") or "user",
             "email": userinfo.get("email", ""),
             "preferred_username": userinfo.get("preferred_username", ""),
-            "groups": sorted(user_groups),
-            "roles": sorted(user_roles),
+            "groups": _limit_claim_values(user_groups),
+            "roles": _limit_claim_values(user_roles),
         }
-        if isinstance(token, dict) and token.get("id_token"):
-            session["oidc_id_token"] = token.get("id_token")
+        # Avoid storing large id_token values in cookie-backed sessions,
+        # otherwise browsers may drop the cookie and cause login loops.
+        session.pop("oidc_id_token", None)
     except Exception as exc:
         return jsonify({"error": f"oidc callback failed: {exc}"}), 401
 
