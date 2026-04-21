@@ -20,6 +20,7 @@ import sys
 import threading
 import time
 import base64
+from datetime import datetime, timezone
 from urllib.parse import urlencode, urlsplit
 
 try:
@@ -203,6 +204,7 @@ BACKEND_URL = BACKEND_URLS[0]
 TEMPLATES_DIR = BASE_DIR / "config-templates"
 STATE_DIR = BASE_DIR / "state"
 START_OPTIONS_FILE = STATE_DIR / "instance-start-options.json"
+INSTANCE_SCHEDULES_FILE = STATE_DIR / "instance-schedules.json"
 STATIC_DIR = BASE_DIR / "static"
 TEMPLATES_DIR.mkdir(exist_ok=True)
 STATE_DIR.mkdir(exist_ok=True)
@@ -218,6 +220,11 @@ APP_VERSION_CHECK_URL = os.environ.get(
     "APP_VERSION_CHECK_URL",
     "https://github.com/ChMG/BNGBlaster-UI/blob/main/VERSION",
 )
+INSTANCE_SCHEDULER_ENABLED = _is_truthy(os.environ.get("INSTANCE_SCHEDULER_ENABLED", "1"), default=True)
+try:
+    INSTANCE_SCHEDULER_INTERVAL_SEC = max(0.5, float(os.environ.get("INSTANCE_SCHEDULER_INTERVAL_SEC", "1")))
+except ValueError:
+    INSTANCE_SCHEDULER_INTERVAL_SEC = 1.0
 
 _oidc_cfg = RUNTIME_CONFIG.get("oidc") if isinstance(RUNTIME_CONFIG.get("oidc"), dict) else {}
 if "enabled" in _oidc_cfg:
@@ -303,6 +310,8 @@ if OIDC_ENABLED:
 _STATE_LOCK = threading.Lock()
 _CLEANUP_START_LOCK = threading.Lock()
 _cleanup_started = False
+_SCHEDULER_START_LOCK = threading.Lock()
+_scheduler_started = False
 _VERSION_CACHE_LOCK = threading.Lock()
 _version_cache: dict[str, dict] = {
     "controller": {"value": None, "ts": 0.0},
@@ -751,6 +760,229 @@ def _save_start_options(data: dict) -> None:
     START_OPTIONS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def _load_instance_schedules() -> list[dict]:
+    if not INSTANCE_SCHEDULES_FILE.exists():
+        return []
+    try:
+        raw = json.loads(INSTANCE_SCHEDULES_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+
+    if isinstance(raw, list):
+        return [item for item in raw if isinstance(item, dict)]
+    if isinstance(raw, dict) and isinstance(raw.get("schedules"), list):
+        return [item for item in raw.get("schedules") if isinstance(item, dict)]
+    return []
+
+
+def _save_instance_schedules(schedules: list[dict]) -> None:
+    payload = {"schedules": schedules}
+    INSTANCE_SCHEDULES_FILE.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _parse_iso_datetime_to_ts(raw) -> float | None:
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if not isinstance(raw, str):
+        return None
+
+    value = raw.strip()
+    if not value:
+        return None
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.timestamp()
+
+
+def _ts_to_iso_z(value) -> str | None:
+    if value is None:
+        return None
+    try:
+        ts = float(value)
+    except (TypeError, ValueError):
+        return None
+    dt = datetime.fromtimestamp(ts, tz=timezone.utc).replace(microsecond=0)
+    return dt.isoformat().replace("+00:00", "Z")
+
+
+def _sanitize_start_options(value) -> dict:
+    if not isinstance(value, dict):
+        return {}
+    allowed = {"logging", "logging_flags", "metric_flags", "report", "report_flags", "pcap", "session_count"}
+    return {k: v for k, v in value.items() if k in allowed}
+
+
+def _schedule_to_api_model(item: dict) -> dict:
+    start_ts = item.get("start_at")
+    stop_ts = item.get("stop_at")
+    runtime_seconds = None
+    try:
+        runtime_seconds = max(0, int(round(float(stop_ts) - float(start_ts))))
+    except (TypeError, ValueError):
+        runtime_seconds = None
+
+    return {
+        "id": item.get("id"),
+        "target": item.get("target", ""),
+        "instance": item.get("instance", ""),
+        "status": item.get("status", "scheduled"),
+        "created_at": _ts_to_iso_z(item.get("created_at")),
+        "start_time": _ts_to_iso_z(start_ts),
+        "stop_time": _ts_to_iso_z(stop_ts),
+        "runtime_seconds": runtime_seconds,
+        "start_executed_at": _ts_to_iso_z(item.get("start_executed_at")),
+        "stop_executed_at": _ts_to_iso_z(item.get("stop_executed_at")),
+        "error": str(item.get("error", "") or ""),
+    }
+
+
+def _scheduler_collect_due_actions(now_ts: float) -> list[dict]:
+    with _STATE_LOCK:
+        schedules = _load_instance_schedules()
+
+    actions: list[dict] = []
+    for item in schedules:
+        sid = str(item.get("id", "") or "").strip()
+        if not sid:
+            continue
+
+        status = str(item.get("status", "scheduled") or "scheduled")
+        start_at = item.get("start_at")
+        stop_at = item.get("stop_at")
+        try:
+            start_ts = float(start_at)
+            stop_ts = float(stop_at)
+        except (TypeError, ValueError):
+            continue
+
+        if status == "scheduled" and now_ts >= start_ts:
+            actions.append({"id": sid, "action": "start", "schedule": item})
+            continue
+
+        if status == "running" and now_ts >= stop_ts:
+            actions.append({"id": sid, "action": "stop", "schedule": item})
+
+    return actions
+
+
+def _scheduler_update_state(schedule_id: str, expected_status: str, next_status: str, error: str = "") -> None:
+    changed = False
+    now_ts = time.time()
+    with _STATE_LOCK:
+        schedules = _load_instance_schedules()
+        for item in schedules:
+            if str(item.get("id", "") or "") != schedule_id:
+                continue
+            current_status = str(item.get("status", "scheduled") or "scheduled")
+            if current_status != expected_status:
+                break
+
+            item["status"] = next_status
+            item["error"] = str(error or "")
+            if next_status == "running":
+                item["start_executed_at"] = now_ts
+            if next_status in {"completed", "failed", "cancelled"}:
+                item["stop_executed_at"] = now_ts
+            changed = True
+            break
+
+        if changed:
+            _save_instance_schedules(schedules)
+
+
+def _scheduler_start_instance(item: dict) -> tuple[bool, str]:
+    target = str(item.get("target", "") or "").strip()
+    instance = str(item.get("instance", "") or "").strip()
+    if not target or not instance:
+        return False, "invalid schedule target or instance"
+
+    status = _backend_instance_status(target, instance)
+    if status is None:
+        return False, "instance status unavailable"
+    if status == "started":
+        return True, ""
+
+    start_options_override = _sanitize_start_options(item.get("start_options_override"))
+    body = start_options_override if start_options_override else _get_saved_start_options_for_target(target, instance)
+    r_start = _backend_request(target, "POST", f"/api/v1/instances/{instance}/_start", body)
+    if r_start is None or not r_start.ok:
+        msg = r_start.text if r_start is not None else "backend not reachable"
+        return False, f"start failed: {msg}"
+    return True, ""
+
+
+def _scheduler_stop_instance(item: dict) -> tuple[bool, str]:
+    target = str(item.get("target", "") or "").strip()
+    instance = str(item.get("instance", "") or "").strip()
+    if not target or not instance:
+        return False, "invalid schedule target or instance"
+
+    status = _backend_instance_status(target, instance)
+    if status is None:
+        return False, "instance status unavailable"
+    if status != "started":
+        return True, ""
+
+    r_stop = _backend_request(target, "POST", f"/api/v1/instances/{instance}/_stop")
+    if r_stop is None or not r_stop.ok:
+        msg = r_stop.text if r_stop is not None else "backend not reachable"
+        return False, f"stop failed: {msg}"
+    return True, ""
+
+
+def _scheduler_worker_loop() -> None:
+    while True:
+        try:
+            now_ts = time.time()
+            actions = _scheduler_collect_due_actions(now_ts)
+            for action in actions:
+                sid = action.get("id")
+                item = action.get("schedule")
+                kind = action.get("action")
+                if not isinstance(item, dict) or not sid or kind not in {"start", "stop"}:
+                    continue
+
+                if kind == "start":
+                    ok, err = _scheduler_start_instance(item)
+                    _scheduler_update_state(sid, "scheduled", "running" if ok else "failed", err)
+                    if ok:
+                        app.logger.info("Scheduler started instance '%s' on '%s'", item.get("instance"), item.get("target"))
+                    else:
+                        app.logger.warning("Scheduler start failed for '%s': %s", item.get("instance"), err)
+                else:
+                    ok, err = _scheduler_stop_instance(item)
+                    _scheduler_update_state(sid, "running", "completed" if ok else "failed", err)
+                    if ok:
+                        app.logger.info("Scheduler stopped instance '%s' on '%s'", item.get("instance"), item.get("target"))
+                    else:
+                        app.logger.warning("Scheduler stop failed for '%s': %s", item.get("instance"), err)
+        except Exception as exc:
+            app.logger.warning("Instance scheduler failed: %s", exc)
+
+        time.sleep(INSTANCE_SCHEDULER_INTERVAL_SEC)
+
+
+def start_scheduler_worker() -> None:
+    global _scheduler_started
+    if not INSTANCE_SCHEDULER_ENABLED:
+        return
+    with _SCHEDULER_START_LOCK:
+        if _scheduler_started:
+            return
+        thread = threading.Thread(target=_scheduler_worker_loop, name="instance-scheduler", daemon=True)
+        thread.start()
+        _scheduler_started = True
+
+
 def _fetch_backend_instances(target: str) -> set[str] | None:
     """Return set of instance names for a backend URL, or None if backend is unreachable."""
     try:
@@ -1032,6 +1264,7 @@ def backend_info():
         "backend_url": BACKEND_URL,
         "backend_urls": BACKEND_URLS,
         "multi_backend": len(BACKEND_URLS) > 1,
+        "instance_scheduler_enabled": INSTANCE_SCHEDULER_ENABLED,
         "version_check_enabled": VERSION_CHECK_ENABLED,
         "app_version": APP_VERSION,
         "app_version_check_enabled": APP_VERSION_CHECK_ENABLED,
@@ -1280,6 +1513,152 @@ def cleanup_instance_start_options():
     return jsonify({"ok": True, "removed": removed})
 
 
+@app.route("/ui-api/instance-schedules", methods=["GET"])
+def list_instance_schedules():
+    active_only = _is_truthy(request.args.get("active", "0"), default=False)
+
+    with _STATE_LOCK:
+        schedules = _load_instance_schedules()
+
+    items = [_schedule_to_api_model(item) for item in schedules if isinstance(item, dict)]
+    if active_only:
+        items = [item for item in items if item.get("status") in {"scheduled", "running"}]
+    items.sort(key=lambda item: (item.get("start_time") or "", item.get("id") or ""))
+    return jsonify({"schedules": items})
+
+
+@app.route("/ui-api/instance-schedules", methods=["POST"])
+def create_instance_schedule():
+    target = _resolve_selected_target(request.headers.get("X-Bngblaster-Target", ""), strict=True)
+    if target is None:
+        return jsonify({"error": "Invalid X-Bngblaster-Target"}), 400
+
+    body = request.get_json(force=True, silent=True)
+    if body is None or not isinstance(body, dict):
+        return jsonify({"error": "body must be valid JSON object"}), 400
+
+    instance = str(body.get("instance", "") or "").strip()
+    if not instance:
+        return jsonify({"error": "instance is required"}), 400
+
+    start_ts = _parse_iso_datetime_to_ts(body.get("start_time"))
+    if start_ts is None:
+        return jsonify({"error": "start_time must be valid ISO timestamp"}), 400
+
+    stop_time_raw = body.get("stop_time")
+    runtime_raw = body.get("runtime_seconds")
+    if stop_time_raw not in {None, ""} and runtime_raw not in {None, ""}:
+        app.logger.info("Instance schedule request contains both stop_time and runtime_seconds; using stop_time")
+
+    stop_ts = None
+    if stop_time_raw not in {None, ""}:
+        stop_ts = _parse_iso_datetime_to_ts(stop_time_raw)
+        if stop_ts is None:
+            return jsonify({"error": "stop_time must be valid ISO timestamp"}), 400
+    elif runtime_raw not in {None, ""}:
+        try:
+            runtime_seconds = int(runtime_raw)
+        except (TypeError, ValueError):
+            return jsonify({"error": "runtime_seconds must be a positive integer"}), 400
+        if runtime_seconds <= 0:
+            return jsonify({"error": "runtime_seconds must be a positive integer"}), 400
+        stop_ts = start_ts + float(runtime_seconds)
+    else:
+        return jsonify({"error": "either stop_time or runtime_seconds is required"}), 400
+
+    if stop_ts <= start_ts:
+        return jsonify({"error": "stop time must be later than start time"}), 400
+
+    start_options_override = _sanitize_start_options(body.get("start_options"))
+    now_ts = time.time()
+    item = {
+        "id": secrets.token_hex(8),
+        "target": target,
+        "instance": instance,
+        "status": "scheduled",
+        "created_at": now_ts,
+        "start_at": start_ts,
+        "stop_at": stop_ts,
+        "start_executed_at": None,
+        "stop_executed_at": None,
+        "error": "",
+    }
+    if start_options_override:
+        item["start_options_override"] = start_options_override
+
+    with _STATE_LOCK:
+        schedules = _load_instance_schedules()
+        schedules.append(item)
+        _save_instance_schedules(schedules)
+
+    return jsonify({"ok": True, "schedule": _schedule_to_api_model(item)}), 201
+
+
+@app.route("/ui-api/instance-schedules/<schedule_id>", methods=["DELETE"])
+def delete_instance_schedule(schedule_id: str):
+    sid = str(schedule_id or "").strip()
+    if not sid:
+        return jsonify({"error": "invalid schedule id"}), 400
+
+    with _STATE_LOCK:
+        schedules = _load_instance_schedules()
+        idx = -1
+        found = None
+        for i, item in enumerate(schedules):
+            if str(item.get("id", "") or "") == sid:
+                idx = i
+                found = item
+                break
+
+        if idx < 0 or not isinstance(found, dict):
+            return jsonify({"error": "schedule not found"}), 404
+
+        if str(found.get("status", "")) == "running":
+            return jsonify({"error": "running schedule cannot be deleted"}), 409
+
+        del schedules[idx]
+        _save_instance_schedules(schedules)
+
+    return jsonify({"ok": True})
+
+
+@app.route("/ui-api/instance-schedules/<schedule_id>/cancel", methods=["POST"])
+def cancel_instance_schedule(schedule_id: str):
+    sid = str(schedule_id or "").strip()
+    if not sid:
+        return jsonify({"error": "invalid schedule id"}), 400
+
+    item: dict | None = None
+    with _STATE_LOCK:
+        schedules = _load_instance_schedules()
+        for candidate in schedules:
+            if str(candidate.get("id", "") or "") == sid and isinstance(candidate, dict):
+                item = dict(candidate)
+                break
+
+    if item is None:
+        return jsonify({"error": "schedule not found"}), 404
+
+    if str(item.get("status", "")) != "running":
+        return jsonify({"error": "only running schedules can be cancelled"}), 409
+
+    ok, err = _scheduler_stop_instance(item)
+    if not ok:
+        msg = f"cancel failed: {err}"
+        _scheduler_update_state(sid, "running", "failed", msg)
+        return jsonify({"error": msg}), 502
+
+    _scheduler_update_state(sid, "running", "cancelled", "")
+
+    with _STATE_LOCK:
+        schedules = _load_instance_schedules()
+        for candidate in schedules:
+            if str(candidate.get("id", "") or "") == sid and isinstance(candidate, dict):
+                return jsonify({"ok": True, "schedule": _schedule_to_api_model(candidate)})
+
+    return jsonify({"ok": True})
+
+
 @app.route("/ui-api/instances/<name>/reconfigure", methods=["PUT"])
 def reconfigure_instance(name: str):
     target = _resolve_selected_target(request.headers.get("X-Bngblaster-Target", ""), strict=True)
@@ -1345,6 +1724,7 @@ if __name__ == "__main__":
         BACKEND_URL = BACKEND_URLS[0]
         BACKEND_GRAFANA_URLS = {url: "" for url in BACKEND_URLS}
     start_cleanup_worker()
+    start_scheduler_worker()
     app.logger.setLevel("DEBUG")
     print(f"UI:      http://localhost:{port}")
     print(f"Backend: {', '.join(BACKEND_URLS)}  (proxied)")
@@ -1353,3 +1733,4 @@ if __name__ == "__main__":
 else:
     # Also run under WSGI servers like Gunicorn.
     start_cleanup_worker()
+    start_scheduler_worker()

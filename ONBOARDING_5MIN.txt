@@ -49,11 +49,21 @@ BNG BLASTER UI - 5 MIN ONBOARDING
 	- instance filter (`instance_name` label)
 	- time-window selection (1m/5m/15m/30m)
 	- always-visible global metrics: instances_running + instances_total
+- Instance Scheduler is available in the Instances page:
+	- create schedules with start_time + stop_time OR runtime_seconds
+	- list schedules via GET /ui-api/instance-schedules
+	- delete non-running schedules via DELETE /ui-api/instance-schedules/{schedule_id}
+	- abort running schedules early via POST /ui-api/instance-schedules/{schedule_id}/cancel
+	- scheduler statuses: scheduled, running, completed, cancelled, failed
+	- while schedule status is scheduled/running, manual instance actions are blocked
+	  (start/stop/kill/edit/delete)
+	- if both stop_time and runtime_seconds are sent, stop_time is used
 
 6) Important data/config paths
 - Runtime config: config.json
 - Templates storage: config-templates/
 - Runtime state storage: state/ (includes instance-start-options.json)
+- Scheduler state storage: state/instance-schedules.json
 - OpenAPI spec used by explorer: static/bngblaster-controler-swagger.yaml
 - UI API OpenAPI spec: static/ui-api-swagger.yaml
 - Local chart runtime (offline): static/vendor/echarts.min.js

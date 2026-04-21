@@ -135,6 +135,98 @@ export default {
       </div>
     </div>
 
+    <!-- Scheduler -->
+    <section class="rounded-xl border border-base-300 bg-base-200 p-4 space-y-4" v-if="schedulerEnabled">
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <h2 class="text-lg font-semibold text-base-content">Instance Scheduler</h2>
+          <p class="text-xs text-base-content/50">Start and stop instances at defined times.</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
+        <div class="lg:col-span-3">
+          <label class="label pb-1"><span class="label-text text-xs font-semibold">Instance</span></label>
+          <select v-model="scheduleForm.instance" class="select select-sm select-bordered w-full bg-base-300">
+            <option value="">Select instance...</option>
+            <option v-for="inst in filteredInstances" :key="'sched-inst-' + inst.name" :value="inst.name">{{ inst.name }}</option>
+          </select>
+        </div>
+
+        <div class="lg:col-span-3">
+          <label class="label pb-1"><span class="label-text text-xs font-semibold">Start time</span></label>
+          <input v-model="scheduleForm.startTime" type="datetime-local" class="input input-sm input-bordered w-full bg-base-300" />
+        </div>
+
+        <div class="lg:col-span-2">
+          <label class="label pb-1"><span class="label-text text-xs font-semibold">Stop mode</span></label>
+          <select v-model="scheduleForm.stopMode" class="select select-sm select-bordered w-full bg-base-300">
+            <option value="stop-time">Stop time</option>
+            <option value="runtime">Runtime</option>
+          </select>
+        </div>
+
+        <div class="lg:col-span-3" v-if="scheduleForm.stopMode === 'stop-time'">
+          <label class="label pb-1"><span class="label-text text-xs font-semibold">Stop time</span></label>
+          <input v-model="scheduleForm.stopTime" @input="onScheduleStopTimeInput" type="datetime-local" class="input input-sm input-bordered w-full bg-base-300" />
+        </div>
+
+        <div class="lg:col-span-3" v-else>
+          <label class="label pb-1"><span class="label-text text-xs font-semibold">Runtime (minutes)</span></label>
+          <input v-model.trim="scheduleForm.runtimeMinutes" type="number" min="1" step="1" class="input input-sm input-bordered w-full bg-base-300" placeholder="e.g. 60" />
+        </div>
+
+        <div class="lg:col-span-1 flex gap-2 lg:justify-end">
+          <button class="btn btn-sm btn-success" @click="createSchedule" :disabled="scheduleForm.saving">
+            <span v-if="scheduleForm.saving" class="loading loading-spinner loading-xs"></span>
+            Create
+          </button>
+        </div>
+      </div>
+      <p v-if="scheduleForm.error" class="text-error text-xs">{{ scheduleForm.error }}</p>
+
+      <div class="rounded-lg border border-base-300 overflow-hidden">
+        <table class="table table-xs w-full stable-table">
+          <thead class="bg-base-300">
+            <tr>
+              <th>Instance</th>
+              <th>Status</th>
+              <th>Start</th>
+              <th>Stop</th>
+              <th class="text-right">Runtime</th>
+              <th>Target</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in schedules" :key="item.id">
+              <td class="mono text-xs">{{ item.instance }}</td>
+              <td>
+                <span class="badge badge-xs"
+                  :class="item.status === 'scheduled' ? 'badge-info' : item.status === 'running' ? 'badge-success' : item.status === 'completed' ? 'badge-ghost' : item.status === 'cancelled' ? 'badge-warning' : 'badge-error'">
+                  {{ item.status }}
+                </span>
+              </td>
+              <td class="text-xs">{{ formatScheduleTime(item.start_time) }}</td>
+              <td class="text-xs">{{ formatScheduleTime(item.stop_time) }}</td>
+              <td class="text-right mono text-xs">{{ formatRuntimeMinutes(item.runtime_seconds) }}</td>
+              <td class="mono text-[11px] text-base-content/50 max-w-[18rem] truncate" :title="item.target">{{ item.target || '—' }}</td>
+              <td>
+                <div class="flex items-center gap-1">
+                  <button v-if="item.status === 'running'" class="btn btn-ghost btn-xs text-warning" @click="cancelSchedule(item)">Abort</button>
+                  <button class="btn btn-ghost btn-xs text-error" @click="deleteSchedule(item)" :disabled="item.status === 'running'">Delete</button>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="!schedules.length">
+              <td colspan="7" class="text-center text-base-content/40 py-4">No schedules created.</td>
+            </tr>
+
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- Table -->
     <div class="rounded-xl overflow-hidden border border-base-300">
       <table class="table table-zebra w-full stable-table">
@@ -172,11 +264,11 @@ export default {
             </td>
             <td>
               <div class="flex flex-wrap gap-1">
-                <button class="btn btn-xs btn-success"  @click="openStartOptions(inst)"  :disabled="inst.busy || isStartedLike(inst.status)">▶ Start</button>
-                <button class="btn btn-xs btn-warning"  @click="action(inst,'stop')"   :disabled="inst.busy || !isStartedLike(inst.status)">⏹ Stop</button>
-                <button class="btn btn-xs btn-error"    @click="action(inst,'kill')"   :disabled="inst.busy || !isStartedLike(inst.status)">⚡ Kill</button>
-                <button class="btn btn-xs btn-ghost"    @click="openEdit(inst)"        :disabled="inst.busy">✏ Edit</button>
-                <button class="btn btn-xs btn-ghost text-error" @click="deleteInst(inst)" :disabled="inst.busy">🗑</button>
+                <button class="btn btn-xs btn-success"  @click="openStartOptions(inst)"  :disabled="inst.busy || isStartedLike(inst.status) || isInstanceScheduled(inst.name)" :title="isInstanceScheduled(inst.name) ? 'Blocked by active schedule' : undefined">▶ Start</button>
+                <button class="btn btn-xs btn-warning"  @click="action(inst,'stop')"   :disabled="inst.busy || !isStartedLike(inst.status) || isInstanceScheduled(inst.name)" :title="isInstanceScheduled(inst.name) ? 'Blocked by active schedule' : undefined">⏹ Stop</button>
+                <button class="btn btn-xs btn-error"    @click="action(inst,'kill')"   :disabled="inst.busy || !isStartedLike(inst.status) || isInstanceScheduled(inst.name)" :title="isInstanceScheduled(inst.name) ? 'Blocked by active schedule' : undefined">⚡ Kill</button>
+                <button class="btn btn-xs btn-ghost"    @click="openEdit(inst)"        :disabled="inst.busy || isInstanceScheduled(inst.name)" :title="isInstanceScheduled(inst.name) ? 'Blocked by active schedule' : undefined">✏ Edit</button>
+                <button class="btn btn-xs btn-ghost text-error" @click="deleteInst(inst)" :disabled="inst.busy || isInstanceScheduled(inst.name)" :title="isInstanceScheduled(inst.name) ? 'Blocked by active schedule' : undefined">🗑</button>
               </div>
             </td>
           </tr>
@@ -468,9 +560,9 @@ export default {
 
         <div class="space-y-3">
           <div class="flex flex-wrap gap-2">
-            <button class="btn btn-sm btn-success"  @click="openStartOptions(detailInst)" :disabled="detailInst.busy || isStartedLike(detailInst.status)">▶ Start</button>
-            <button class="btn btn-sm btn-warning"  @click="action(detailInst,'stop')" :disabled="detailInst.busy || !isStartedLike(detailInst.status)">⏹ Stop</button>
-            <button class="btn btn-sm btn-error"    @click="action(detailInst,'kill')" :disabled="detailInst.busy || !isStartedLike(detailInst.status)">⚡ Kill</button>
+            <button class="btn btn-sm btn-success"  @click="openStartOptions(detailInst)" :disabled="detailInst.busy || isStartedLike(detailInst.status) || isInstanceScheduled(detailInst.name)" :title="isInstanceScheduled(detailInst.name) ? 'Blocked by active schedule' : undefined">▶ Start</button>
+            <button class="btn btn-sm btn-warning"  @click="action(detailInst,'stop')" :disabled="detailInst.busy || !isStartedLike(detailInst.status) || isInstanceScheduled(detailInst.name)" :title="isInstanceScheduled(detailInst.name) ? 'Blocked by active schedule' : undefined">⏹ Stop</button>
+            <button class="btn btn-sm btn-error"    @click="action(detailInst,'kill')" :disabled="detailInst.busy || !isStartedLike(detailInst.status) || isInstanceScheduled(detailInst.name)" :title="isInstanceScheduled(detailInst.name) ? 'Blocked by active schedule' : undefined">⚡ Kill</button>
           </div>
 
           <div>
@@ -708,6 +800,19 @@ export default {
     const toast       = ref(null);
     const templates   = ref([]);
     const templateSearchQuery = ref("");
+    const schedulerEnabled = ref(true);
+    const schedulesLoading = ref(false);
+    const schedules = ref([]);
+    const scheduleForm = ref({
+      instance: "",
+      startTime: "",
+      stopMode: "stop-time",
+      stopTime: "",
+      runtimeMinutes: "60",
+      saving: false,
+      error: "",
+    });
+    const scheduleStopTimeTouched = ref(false);
     const startLoggingFlags = START_LOGGING_FLAGS;
     const startMetricFlags = START_METRIC_FLAGS;
     const startReportFlags = START_REPORT_FLAGS;
@@ -866,6 +971,219 @@ export default {
       setTimeout(() => { toast.value = null; }, 3000);
     }
 
+    function toLocalInputValue(date) {
+      const d = date instanceof Date ? date : new Date(date);
+      if (Number.isNaN(d.getTime())) return "";
+      const pad = (n) => String(n).padStart(2, "0");
+      const yyyy = d.getFullYear();
+      const mm = pad(d.getMonth() + 1);
+      const dd = pad(d.getDate());
+      const hh = pad(d.getHours());
+      const mi = pad(d.getMinutes());
+      return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+    }
+
+    function initializeScheduleForm() {
+      const now = new Date();
+      now.setSeconds(0, 0);
+      const start = new Date(now.getTime() + 5 * 60 * 1000);
+      const stop = new Date(start.getTime() + 60 * 60 * 1000);
+      scheduleForm.value.startTime = toLocalInputValue(start);
+      scheduleForm.value.stopTime = toLocalInputValue(stop);
+      scheduleStopTimeTouched.value = false;
+      if (!scheduleForm.value.runtimeMinutes) {
+        scheduleForm.value.runtimeMinutes = "60";
+      }
+      scheduleForm.value.error = "";
+    }
+
+    function getScheduleRuntimeMinutesDefault() {
+      const minutes = Number(scheduleForm.value.runtimeMinutes);
+      if (!Number.isFinite(minutes) || minutes <= 0 || !Number.isInteger(minutes)) {
+        return 60;
+      }
+      return minutes;
+    }
+
+    function syncScheduleStopTimeFromStart() {
+      const startDt = parseLocalDateTimeInput(scheduleForm.value.startTime);
+      if (!startDt) return;
+      const minutes = getScheduleRuntimeMinutesDefault();
+      const stopDt = new Date(startDt.getTime() + (minutes * 60 * 1000));
+      scheduleForm.value.stopTime = toLocalInputValue(stopDt);
+    }
+
+    function onScheduleStopTimeInput() {
+      scheduleStopTimeTouched.value = true;
+    }
+
+    function parseLocalDateTimeInput(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return null;
+      const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+      if (!m) return null;
+
+      const year = Number(m[1]);
+      const month = Number(m[2]);
+      const day = Number(m[3]);
+      const hour = Number(m[4]);
+      const minute = Number(m[5]);
+      const second = Number(m[6] || "0");
+
+      const dt = new Date(year, month - 1, day, hour, minute, second, 0);
+      if (
+        Number.isNaN(dt.getTime())
+        || dt.getFullYear() !== year
+        || dt.getMonth() !== month - 1
+        || dt.getDate() !== day
+        || dt.getHours() !== hour
+        || dt.getMinutes() !== minute
+        || dt.getSeconds() !== second
+      ) {
+        return null;
+      }
+      return dt;
+    }
+
+    function localInputToIso(value) {
+      const dt = parseLocalDateTimeInput(value);
+      if (!dt) return "";
+      return dt.toISOString();
+    }
+
+    function formatScheduleTime(value) {
+      if (!value) return "—";
+      const dt = new Date(value);
+      if (Number.isNaN(dt.getTime())) return "—";
+      return dt.toLocaleString("en-US", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      });
+    }
+
+    function formatRuntimeMinutes(value) {
+      const seconds = Number(value);
+      if (!Number.isFinite(seconds) || seconds <= 0) return "—";
+      return `${Math.round(seconds / 60)}m`;
+    }
+
+    function isInstanceScheduled(name) {
+      return schedules.value.some(
+        s => s.instance === name && (s.status === "scheduled" || s.status === "running")
+      );
+    }
+
+    async function loadSchedulerInfo() {
+      try {
+        const info = await api.get("/ui-api/backend-info");
+        if (info && typeof info === "object" && "instance_scheduler_enabled" in info) {
+          schedulerEnabled.value = !!info.instance_scheduler_enabled;
+        }
+      } catch {
+        schedulerEnabled.value = true;
+      }
+    }
+
+    async function loadSchedules(options = {}) {
+      const { activeOnly = false, silent = false } = options;
+      if (!schedulerEnabled.value) return;
+      schedulesLoading.value = true;
+      try {
+        const qs = activeOnly ? "?active=1" : "";
+        const data = await api.get(`/ui-api/instance-schedules${qs}`);
+        const list = Array.isArray(data?.schedules) ? data.schedules : [];
+        schedules.value = list;
+      } catch (e) {
+        if (!silent) {
+          showToast(`Failed to load schedules: ${e.message}`, "error");
+        }
+      } finally {
+        schedulesLoading.value = false;
+      }
+    }
+
+    async function createSchedule() {
+      scheduleForm.value.error = "";
+      const instance = String(scheduleForm.value.instance || "").trim();
+      if (!instance) {
+        scheduleForm.value.error = "Instance is required";
+        return;
+      }
+
+      const startDt = parseLocalDateTimeInput(scheduleForm.value.startTime);
+      if (!startDt) {
+        scheduleForm.value.error = "Start time is invalid";
+        return;
+      }
+      const startIso = startDt.toISOString();
+
+      const payload = { instance, start_time: startIso };
+      if (scheduleForm.value.stopMode === "stop-time") {
+        const stopDt = parseLocalDateTimeInput(scheduleForm.value.stopTime);
+        if (!stopDt) {
+          scheduleForm.value.error = "Stop time is invalid";
+          return;
+        }
+        const deltaSeconds = Math.round((stopDt.getTime() - startDt.getTime()) / 1000);
+        if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) {
+          scheduleForm.value.error = "Stop time must be later than start time";
+          return;
+        }
+        payload.stop_time = stopDt.toISOString();
+      } else {
+        const minutes = Number(scheduleForm.value.runtimeMinutes);
+        if (!Number.isFinite(minutes) || minutes <= 0 || !Number.isInteger(minutes)) {
+          scheduleForm.value.error = "Runtime must be a positive integer (minutes)";
+          return;
+        }
+        payload.runtime_seconds = minutes * 60;
+      }
+
+      scheduleForm.value.saving = true;
+      try {
+        await api.post("/ui-api/instance-schedules", payload);
+        showToast(`Schedule created for ${instance}`);
+        initializeScheduleForm();
+        await loadSchedules();
+      } catch (e) {
+        scheduleForm.value.error = e.message;
+      } finally {
+        scheduleForm.value.saving = false;
+      }
+    }
+
+    async function deleteSchedule(item) {
+      const sid = String(item?.id || "").trim();
+      if (!sid) return;
+      if (!confirm(`Delete schedule ${sid}?`)) return;
+      try {
+        await api.delete(`/ui-api/instance-schedules/${encodeURIComponent(sid)}`);
+        showToast("Schedule deleted");
+        await loadSchedules();
+      } catch (e) {
+        showToast(`Delete schedule failed: ${e.message}`, "error");
+      }
+    }
+
+    async function cancelSchedule(item) {
+      const sid = String(item?.id || "").trim();
+      if (!sid) return;
+      if (String(item?.status || "") !== "running") return;
+      if (!confirm(`Abort running schedule ${sid} now?`)) return;
+      try {
+        await api.post(`/ui-api/instance-schedules/${encodeURIComponent(sid)}/cancel`, {});
+        showToast("Schedule aborted");
+        await loadAll();
+      } catch (e) {
+        showToast(`Abort schedule failed: ${e.message}`, "error");
+      }
+    }
+
     function toCounterValue(raw) {
       if (raw === undefined || raw === null || raw === "") return null;
       const num = Number(raw);
@@ -985,6 +1303,7 @@ export default {
           }
         }));
         lastUpdated.value = new Date().toLocaleTimeString("en-US");
+        await loadSchedules({ silent: true });
       } catch (e) {
         showToast("Failed to load instance list", "error");
       } finally {
@@ -1746,8 +2065,22 @@ export default {
     }
     function onIntervalChange() { if (autoOn.value) restartPoller(); }
 
+    watch(() => scheduleForm.value.startTime, () => {
+      if (scheduleForm.value.stopMode !== "stop-time") return;
+      if (scheduleStopTimeTouched.value) return;
+      syncScheduleStopTimeFromStart();
+    });
+
+    watch(() => scheduleForm.value.stopMode, (mode) => {
+      if (mode !== "stop-time") return;
+      if (scheduleStopTimeTouched.value) return;
+      syncScheduleStopTimeFromStart();
+    });
+
     onMounted(async () => {
-      await loadAll();
+      await loadSchedulerInfo();
+      initializeScheduleForm();
+      await Promise.all([loadAll(), loadSchedules({ silent: true })]);
       restartPoller();
     });
 
@@ -1780,6 +2113,7 @@ export default {
 
     return {
       instances, instanceSearch, filteredInstances, loading, lastUpdated, autoOn, intervalSec, toast,
+      schedulerEnabled, schedulesLoading, schedules, scheduleForm,
       templates, templateSearchQuery, filteredTemplates, modalRef, startOptionsRef, editing, form, startOptions, startLoggingFlags, startMetricFlags, startReportFlags,
       detailRef, detailInst, cmdName, cmdArgs, cmdResult, downloadFiles,
       sessionsLoading, sessionsError, sessions, filteredSessions, sessionsUpdated,
@@ -1795,8 +2129,9 @@ export default {
       instTextVarList, instTextVarValues,
       instIfVarSelectionsComplete, instAvailableInterfaces, instFilteredInterfaces, instTemplatePreviewHtml,
       stopAndReapplyModal, stopAndReapplyPending,
-      formatCounterCell,
+      formatCounterCell, formatScheduleTime, formatRuntimeMinutes,
       loadAll, action, deleteInst, openCreate, openEdit, closeModal,
+      loadSchedules, createSchedule, deleteSchedule, cancelSchedule, isInstanceScheduled,
       openStartOptions, closeStartOptions, confirmStartWithOptions, toggleStartLoggingFlag, toggleStartMetricFlag, toggleStartReportFlag,
       applyTemplate, confirmApplyTemplateWithVars, saveInstance, proceedStopApplyRestart, openDetail, sendCommand, loadSessions,
       runSessionAction, restartSession, sessionActionMeta, prevSessionPage, nextSessionPage,
@@ -1804,6 +2139,7 @@ export default {
       openSessionDetail, refreshSessionDetail, closeSessionDetail,
       saveFormAsTemplate,
       onAutoChange, onIntervalChange,
+      onScheduleStopTimeInput,
       onSessionAutoChange, onSessionIntervalChange, onDetailClose,
     };
   },

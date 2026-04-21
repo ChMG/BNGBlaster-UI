@@ -11,6 +11,7 @@ tags:
   - name: templates
   - name: backend
   - name: start-options
+  - name: schedules
   - name: auth
 
 paths:
@@ -334,6 +335,152 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorObject'
 
+  /ui-api/instance-schedules:
+    get:
+      tags: [schedules]
+      summary: List instance schedules
+      parameters:
+        - in: query
+          name: active
+          required: false
+          schema:
+            type: boolean
+          description: If true, only return schedules with status scheduled or running.
+      responses:
+        '200':
+          description: Schedule list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schedules:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InstanceSchedule'
+                required: [schedules]
+    post:
+      tags: [schedules]
+      summary: Create a start/stop schedule for one instance
+      parameters:
+        - in: header
+          name: X-Bngblaster-Target
+          required: false
+          schema:
+            type: string
+          description: Selected backend target URL (or numeric index).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstanceScheduleCreateRequest'
+      responses:
+        '201':
+          description: Schedule created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  schedule:
+                    $ref: '#/components/schemas/InstanceSchedule'
+                required: [ok, schedule]
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+
+  /ui-api/instance-schedules/{schedule_id}:
+    delete:
+      tags: [schedules]
+      summary: Delete a schedule
+      parameters:
+        - in: path
+          name: schedule_id
+          required: true
+          schema:
+            type: string
+          description: Schedule ID returned by create endpoint.
+      responses:
+        '400':
+          description: Invalid schedule id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkObject'
+        '404':
+          description: Schedule not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+        '409':
+          description: Running schedules cannot be deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+
+  /ui-api/instance-schedules/{schedule_id}/cancel:
+    post:
+      tags: [schedules]
+      summary: Cancel a running schedule and stop instance immediately
+      parameters:
+        - in: path
+          name: schedule_id
+          required: true
+          schema:
+            type: string
+          description: Schedule ID returned by create endpoint.
+      responses:
+        '400':
+          description: Invalid schedule id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+        '200':
+          description: Schedule cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  schedule:
+                    $ref: '#/components/schemas/InstanceSchedule'
+                required: [ok]
+        '404':
+          description: Schedule not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+        '409':
+          description: Only running schedules can be cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+        '502':
+          description: Backend stop failed during cancel
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+
 components:
   schemas:
     TemplateListItem:
@@ -384,6 +531,8 @@ components:
             type: string
         oidc_user:
           $ref: '#/components/schemas/OidcUser'
+        instance_scheduler_enabled:
+          type: boolean
         version_status:
           type: object
           properties:
@@ -391,7 +540,7 @@ components:
               $ref: '#/components/schemas/VersionStatusEntry'
             blaster:
               $ref: '#/components/schemas/VersionStatusEntry'
-      required: [app_version, app_version_check_enabled, backend_url, backend_urls, multi_backend, version_check_enabled]
+      required: [app_version, app_version_check_enabled, backend_url, backend_urls, multi_backend, version_check_enabled, instance_scheduler_enabled]
 
     AuthStatus:
       type: object
@@ -499,6 +648,68 @@ components:
         session_count:
           type: integer
           minimum: 1
+
+    InstanceSchedule:
+      type: object
+      properties:
+        id:
+          type: string
+        target:
+          type: string
+        instance:
+          type: string
+        status:
+          type: string
+          enum: [scheduled, running, completed, cancelled, failed]
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        start_time:
+          type: string
+          format: date-time
+          nullable: true
+        stop_time:
+          type: string
+          format: date-time
+          nullable: true
+        runtime_seconds:
+          type: integer
+          nullable: true
+        start_executed_at:
+          type: string
+          format: date-time
+          nullable: true
+        stop_executed_at:
+          type: string
+          format: date-time
+          nullable: true
+        error:
+          type: string
+      required: [id, target, instance, status, error]
+
+    InstanceScheduleCreateRequest:
+      type: object
+      properties:
+        instance:
+          type: string
+          description: Instance name
+        start_time:
+          type: string
+          format: date-time
+          description: UTC timestamp (for example 2026-04-21T20:00:00Z)
+        stop_time:
+          type: string
+          format: date-time
+          description: Optional explicit UTC stop timestamp.
+        runtime_seconds:
+          type: integer
+          minimum: 1
+          description: Optional runtime in seconds (alternative to stop_time).
+        start_options:
+          $ref: '#/components/schemas/StartOptions'
+      required: [instance, start_time]
+      description: Prefer stop_time; if both stop_time and runtime_seconds are provided, stop_time takes precedence.
 
     OkObject:
       type: object

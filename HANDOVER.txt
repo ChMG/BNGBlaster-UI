@@ -1,5 +1,5 @@
 BNG BLASTER UI - HANDOVER
-Last updated: 2026-04-15
+Last updated: 2026-04-21
 
 1) CURRENT STACK
 - Backend: Flask proxy/app in server.py
@@ -47,6 +47,24 @@ L) Metrics Charts page (ECharts)
 - Supports instance filter via label instance_name
 - Supports selectable visible time window (1m, 5m, 15m, 30m)
 - instances_running and instances_total are always included regardless of selected instance
+
+M) Instance scheduler
+- New UI section in instances page for timed start/stop scheduling.
+- Scheduler API endpoints:
+  - GET /ui-api/instance-schedules
+  - POST /ui-api/instance-schedules
+  - DELETE /ui-api/instance-schedules/<schedule_id>
+  - POST /ui-api/instance-schedules/<schedule_id>/cancel
+- Scheduler runtime state persisted in state/instance-schedules.json.
+- Scheduler worker can be toggled and tuned via env vars:
+  - INSTANCE_SCHEDULER_ENABLED
+  - INSTANCE_SCHEDULER_INTERVAL_SEC
+- Schedule lifecycle statuses: scheduled, running, completed, cancelled, failed.
+- Running schedules can be aborted early via the Abort action in UI or cancel endpoint.
+- While a schedule is active (scheduled/running), manual instance actions are blocked:
+  start, stop, kill, edit, delete.
+- API behavior note: when both stop_time and runtime_seconds are provided,
+  stop_time takes precedence.
 
 C) Instances + Sessions enhancements
 - Session table and controls heavily improved.

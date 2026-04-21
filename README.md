@@ -17,6 +17,7 @@ Python-based web application for the BNG Blaster Controller with a modern single
 - Stop-apply-restart workflow for updating running instances' configuration
 - Restart-after-edit reuses last start options per instance (persisted server-side)
 - Manual start dialog pre-fills last saved start options per instance
+- Instance scheduler for timed start/stop (explicit stop time or runtime-based stop)
 - Deleting an instance also removes its saved start options from server state
 - In multi-backend mode, saved start options are namespaced per backend target and instance name
 - Orphaned start-option entries are cleaned up periodically server-side if instances were deleted outside the UI
@@ -190,6 +191,8 @@ Gunicorn runtime options can be customized via environment variables:
 - `APP_VERSION_CHECK_ENABLED` (default: `1`)
 - `APP_VERSION_CHECK_CACHE_SEC` (default: `3600`, minimum: `60`)
 - `APP_VERSION_CHECK_URL` (default: `https://github.com/ChMG/BNGBlaster-UI/blob/main/VERSION`)
+- `INSTANCE_SCHEDULER_ENABLED` (default: `1`)
+- `INSTANCE_SCHEDULER_INTERVAL_SEC` (default: `1`, minimum: `0.5`)
 - `CONFIG_FILE` (optional, default: `./config.json`)
 
 Controller, Grafana and OIDC settings are loaded from `config.json`.
@@ -409,6 +412,56 @@ curl -X PUT \
 	-H "X-Bngblaster-Target: http://bng2:8001" \
 	-d '{"interfaces": {"network": {"interface": "eth1"}}}' \
 	http://localhost:8080/ui-api/instances/sample/reconfigure
+```
+
+Schedule example (start and stop at explicit times):
+
+```bash
+curl -X POST \
+	-H "Content-Type: application/json" \
+	-H "X-Bngblaster-Target: http://localhost:8001" \
+	-d '{
+		"instance": "sample",
+		"start_time": "2026-04-21T20:00:00Z",
+		"stop_time": "2026-04-21T22:00:00Z"
+	}' \
+	http://localhost:8080/ui-api/instance-schedules
+```
+
+Schedule example (stop derived from runtime):
+
+```bash
+curl -X POST \
+	-H "Content-Type: application/json" \
+	-d '{
+		"instance": "sample",
+		"start_time": "2026-04-21T20:00:00Z",
+		"runtime_seconds": 3600
+	}' \
+	http://localhost:8080/ui-api/instance-schedules
+```
+
+List schedules:
+
+```bash
+curl "http://localhost:8080/ui-api/instance-schedules?active=1"
+```
+
+Scheduler API notes:
+
+- `?active=1` returns only schedules with status `scheduled` or `running`.
+- If both `stop_time` and `runtime_seconds` are sent, `stop_time` takes precedence.
+
+Delete schedule:
+
+```bash
+curl -X DELETE http://localhost:8080/ui-api/instance-schedules/<schedule-id>
+```
+
+Cancel running schedule early:
+
+```bash
+curl -X POST http://localhost:8080/ui-api/instance-schedules/<schedule-id>/cancel
 ```
 
 ## VS Code Debugging
