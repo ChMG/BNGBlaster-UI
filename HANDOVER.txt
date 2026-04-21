@@ -55,14 +55,20 @@ M) Instance scheduler
   - POST /ui-api/instance-schedules
   - DELETE /ui-api/instance-schedules/<schedule_id>
   - POST /ui-api/instance-schedules/<schedule_id>/cancel
+  - GET /ui-api/instance-schedules/<schedule_id>/artifact
 - Scheduler runtime state persisted in state/instance-schedules.json.
+- Scheduler artifact ZIPs persisted in state/instance-schedule-artifacts/.
 - Scheduler worker can be toggled and tuned via env vars:
   - INSTANCE_SCHEDULER_ENABLED
   - INSTANCE_SCHEDULER_INTERVAL_SEC
-- Schedule lifecycle statuses: scheduled, running, completed, cancelled, failed.
+  - INSTANCE_SCHEDULER_ARTIFACT_INITIAL_DELAY_SEC
+  - INSTANCE_SCHEDULER_ARTIFACT_WAIT_SEC
+  - INSTANCE_SCHEDULER_ARTIFACT_POLL_SEC
+- Schedule lifecycle statuses: scheduled, running, waiting for artifacts, completed, cancelled, failed.
 - Running schedules can be aborted early via the Abort action in UI or cancel endpoint.
-- While a schedule is active (scheduled/running), manual instance actions are blocked:
+- While a schedule is active (scheduled/running/waiting for artifacts), manual instance actions are blocked:
   start, stop, kill, edit, delete.
+- Artifact download starts only after initial delay, then polls for files and writes ZIP.
 - API behavior note: when both stop_time and runtime_seconds are provided,
   stop_time takes precedence.
 

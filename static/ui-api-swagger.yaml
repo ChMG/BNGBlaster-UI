@@ -345,7 +345,7 @@ paths:
           required: false
           schema:
             type: boolean
-          description: If true, only return schedules with status scheduled or running.
+          description: If true, only return schedules with status scheduled, running, or waiting for artifacts.
       responses:
         '200':
           description: Schedule list
@@ -426,7 +426,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorObject'
         '409':
-          description: Running schedules cannot be deleted
+          description: Active schedules (running or waiting for artifacts) cannot be deleted
           content:
             application/json:
               schema:
@@ -476,6 +476,38 @@ paths:
                 $ref: '#/components/schemas/ErrorObject'
         '502':
           description: Backend stop failed during cancel
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+
+  /ui-api/instance-schedules/{schedule_id}/artifact:
+    get:
+      tags: [schedules]
+      summary: Download scheduler artifact ZIP
+      parameters:
+        - in: path
+          name: schedule_id
+          required: true
+          schema:
+            type: string
+          description: Schedule ID returned by create endpoint.
+      responses:
+        '200':
+          description: ZIP archive containing downloaded instance output files
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid schedule id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+        '404':
+          description: Artifact not available for this schedule
           content:
             application/json:
               schema:
@@ -660,7 +692,7 @@ components:
           type: string
         status:
           type: string
-          enum: [scheduled, running, completed, cancelled, failed]
+          enum: [scheduled, running, "waiting for artifacts", completed, cancelled, failed]
         created_at:
           type: string
           format: date-time
@@ -676,6 +708,10 @@ components:
         runtime_seconds:
           type: integer
           nullable: true
+        artifact_available:
+          type: boolean
+        artifact_name:
+          type: string
         start_executed_at:
           type: string
           format: date-time
@@ -686,7 +722,7 @@ components:
           nullable: true
         error:
           type: string
-      required: [id, target, instance, status, error]
+      required: [id, target, instance, status, artifact_available, artifact_name, error]
 
     InstanceScheduleCreateRequest:
       type: object

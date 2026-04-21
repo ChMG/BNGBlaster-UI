@@ -20,6 +20,7 @@ import sys
 import threading
 import time
 import base64
+import zipfile
 from datetime import datetime, timezone
 from urllib.parse import urlencode, urlsplit
 
@@ -205,9 +206,21 @@ TEMPLATES_DIR = BASE_DIR / "config-templates"
 STATE_DIR = BASE_DIR / "state"
 START_OPTIONS_FILE = STATE_DIR / "instance-start-options.json"
 INSTANCE_SCHEDULES_FILE = STATE_DIR / "instance-schedules.json"
+INSTANCE_SCHEDULE_ARTIFACTS_DIR = STATE_DIR / "instance-schedule-artifacts"
 STATIC_DIR = BASE_DIR / "static"
 TEMPLATES_DIR.mkdir(exist_ok=True)
 STATE_DIR.mkdir(exist_ok=True)
+INSTANCE_SCHEDULE_ARTIFACTS_DIR.mkdir(exist_ok=True)
+
+SCHEDULE_DOWNLOAD_FILES = [
+    "config.json",
+    "run.json",
+    "run.log",
+    "run_report.json",
+    "run.pcap",
+    "run.stdout",
+    "run.stderr",
+]
 
 START_OPTIONS_CLEANUP_ENABLED = os.environ.get("START_OPTIONS_CLEANUP_ENABLED", "1") not in {"0", "false", "False", "no", "NO"}
 START_OPTIONS_CLEANUP_INTERVAL_SEC = max(30, int(os.environ.get("START_OPTIONS_CLEANUP_INTERVAL_SEC", "300")))
@@ -225,6 +238,18 @@ try:
     INSTANCE_SCHEDULER_INTERVAL_SEC = max(0.5, float(os.environ.get("INSTANCE_SCHEDULER_INTERVAL_SEC", "1")))
 except ValueError:
     INSTANCE_SCHEDULER_INTERVAL_SEC = 1.0
+try:
+    INSTANCE_SCHEDULER_ARTIFACT_INITIAL_DELAY_SEC = max(0.0, float(os.environ.get("INSTANCE_SCHEDULER_ARTIFACT_INITIAL_DELAY_SEC", "30")))
+except ValueError:
+    INSTANCE_SCHEDULER_ARTIFACT_INITIAL_DELAY_SEC = 30.0
+try:
+    INSTANCE_SCHEDULER_ARTIFACT_WAIT_SEC = max(0.0, float(os.environ.get("INSTANCE_SCHEDULER_ARTIFACT_WAIT_SEC", "30")))
+except ValueError:
+    INSTANCE_SCHEDULER_ARTIFACT_WAIT_SEC = 30.0
+try:
+    INSTANCE_SCHEDULER_ARTIFACT_POLL_SEC = max(0.2, float(os.environ.get("INSTANCE_SCHEDULER_ARTIFACT_POLL_SEC", "2")))
+except ValueError:
+    INSTANCE_SCHEDULER_ARTIFACT_POLL_SEC = 2.0
 
 _oidc_cfg = RUNTIME_CONFIG.get("oidc") if isinstance(RUNTIME_CONFIG.get("oidc"), dict) else {}
 if "enabled" in _oidc_cfg:
@@ -839,10 +864,80 @@ def _schedule_to_api_model(item: dict) -> dict:
         "start_time": _ts_to_iso_z(start_ts),
         "stop_time": _ts_to_iso_z(stop_ts),
         "runtime_seconds": runtime_seconds,
+        "artifact_available": bool(item.get("artifact_path")),
+        "artifact_name": str(item.get("artifact_name", "") or ""),
         "start_executed_at": _ts_to_iso_z(item.get("start_executed_at")),
         "stop_executed_at": _ts_to_iso_z(item.get("stop_executed_at")),
         "error": str(item.get("error", "") or ""),
     }
+
+
+def _schedule_artifact_filename(schedule_id: str, instance: str) -> str:
+    safe_instance = re.sub(r"[^a-zA-Z0-9_.-]+", "_", str(instance or "").strip()) or "instance"
+    safe_sid = re.sub(r"[^a-zA-Z0-9_.-]+", "", str(schedule_id or "").strip()) or secrets.token_hex(4)
+    return f"schedule-{safe_instance}-{safe_sid}.zip"
+
+
+def _scheduler_write_artifact_zip(target: str, instance: str, schedule_id: str) -> tuple[str | None, str]:
+    files_payload: dict[str, bytes] = {}
+    if INSTANCE_SCHEDULER_ARTIFACT_INITIAL_DELAY_SEC > 0:
+        time.sleep(INSTANCE_SCHEDULER_ARTIFACT_INITIAL_DELAY_SEC)
+    deadline_ts = time.time() + INSTANCE_SCHEDULER_ARTIFACT_WAIT_SEC
+    while True:
+        for name in SCHEDULE_DOWNLOAD_FILES:
+            if name in files_payload:
+                continue
+            r_file = _backend_request(target, "GET", f"/api/v1/instances/{instance}/{name}")
+            if r_file is None or not r_file.ok:
+                continue
+            content = r_file.content
+            if not isinstance(content, (bytes, bytearray)) or len(content) == 0:
+                continue
+            files_payload[name] = bytes(content)
+
+        if len(files_payload) >= len(SCHEDULE_DOWNLOAD_FILES):
+            break
+        if time.time() >= deadline_ts:
+            break
+        time.sleep(INSTANCE_SCHEDULER_ARTIFACT_POLL_SEC)
+
+    if not files_payload:
+        return None, "no downloadable instance files available"
+
+    zip_name = _schedule_artifact_filename(schedule_id, instance)
+    zip_path = INSTANCE_SCHEDULE_ARTIFACTS_DIR / zip_name
+    try:
+        with zipfile.ZipFile(zip_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for arc_name in SCHEDULE_DOWNLOAD_FILES:
+                payload = files_payload.get(arc_name)
+                if payload is None:
+                    continue
+                zf.writestr(arc_name, payload)
+    except Exception as exc:
+        return None, f"artifact zip creation failed: {exc}"
+
+    return zip_name, ""
+
+
+def _scheduler_store_artifact(schedule_id: str, zip_name: str | None) -> None:
+    with _STATE_LOCK:
+        schedules = _load_instance_schedules()
+        changed = False
+        for item in schedules:
+            if str(item.get("id", "") or "") != schedule_id:
+                continue
+            previous = str(item.get("artifact_path", "") or "").strip()
+            if previous and previous != str(zip_name or ""):
+                try:
+                    (INSTANCE_SCHEDULE_ARTIFACTS_DIR / previous).unlink(missing_ok=True)
+                except Exception:
+                    pass
+            item["artifact_path"] = str(zip_name or "")
+            item["artifact_name"] = str(zip_name or "")
+            changed = True
+            break
+        if changed:
+            _save_instance_schedules(schedules)
 
 
 def _scheduler_collect_due_actions(now_ts: float) -> list[dict]:
@@ -960,10 +1055,20 @@ def _scheduler_worker_loop() -> None:
                         app.logger.warning("Scheduler start failed for '%s': %s", item.get("instance"), err)
                 else:
                     ok, err = _scheduler_stop_instance(item)
-                    _scheduler_update_state(sid, "running", "completed" if ok else "failed", err)
                     if ok:
+                        _scheduler_update_state(sid, "running", "waiting for artifacts", "")
+                        zip_name, zip_err = _scheduler_write_artifact_zip(
+                            str(item.get("target", "") or "").strip(),
+                            str(item.get("instance", "") or "").strip(),
+                            str(sid),
+                        )
+                        _scheduler_store_artifact(str(sid), zip_name)
+                        _scheduler_update_state(sid, "waiting for artifacts", "completed", zip_err)
+                        if zip_err:
+                            app.logger.warning("Scheduler artifact export failed for '%s': %s", item.get("instance"), zip_err)
                         app.logger.info("Scheduler stopped instance '%s' on '%s'", item.get("instance"), item.get("target"))
                     else:
+                        _scheduler_update_state(sid, "running", "failed", err)
                         app.logger.warning("Scheduler stop failed for '%s': %s", item.get("instance"), err)
         except Exception as exc:
             app.logger.warning("Instance scheduler failed: %s", exc)
@@ -1522,7 +1627,7 @@ def list_instance_schedules():
 
     items = [_schedule_to_api_model(item) for item in schedules if isinstance(item, dict)]
     if active_only:
-        items = [item for item in items if item.get("status") in {"scheduled", "running"}]
+        items = [item for item in items if item.get("status") in {"scheduled", "running", "waiting for artifacts"}]
     items.sort(key=lambda item: (item.get("start_time") or "", item.get("id") or ""))
     return jsonify({"schedules": items})
 
@@ -1581,6 +1686,8 @@ def create_instance_schedule():
         "stop_at": stop_ts,
         "start_executed_at": None,
         "stop_executed_at": None,
+        "artifact_path": "",
+        "artifact_name": "",
         "error": "",
     }
     if start_options_override:
@@ -1613,8 +1720,15 @@ def delete_instance_schedule(schedule_id: str):
         if idx < 0 or not isinstance(found, dict):
             return jsonify({"error": "schedule not found"}), 404
 
-        if str(found.get("status", "")) == "running":
-            return jsonify({"error": "running schedule cannot be deleted"}), 409
+        if str(found.get("status", "")) in {"running", "waiting for artifacts"}:
+            return jsonify({"error": "active schedule cannot be deleted"}), 409
+
+        artifact_path = str(found.get("artifact_path", "") or "").strip()
+        if artifact_path:
+            try:
+                (INSTANCE_SCHEDULE_ARTIFACTS_DIR / artifact_path).unlink(missing_ok=True)
+            except Exception:
+                app.logger.warning("Failed to remove schedule artifact '%s'", artifact_path)
 
         del schedules[idx]
         _save_instance_schedules(schedules)
@@ -1648,7 +1762,16 @@ def cancel_instance_schedule(schedule_id: str):
         _scheduler_update_state(sid, "running", "failed", msg)
         return jsonify({"error": msg}), 502
 
-    _scheduler_update_state(sid, "running", "cancelled", "")
+    _scheduler_update_state(sid, "running", "waiting for artifacts", "")
+    zip_name, zip_err = _scheduler_write_artifact_zip(
+        str(item.get("target", "") or "").strip(),
+        str(item.get("instance", "") or "").strip(),
+        sid,
+    )
+    _scheduler_store_artifact(sid, zip_name)
+    _scheduler_update_state(sid, "waiting for artifacts", "cancelled", zip_err)
+    if zip_err:
+        app.logger.warning("Scheduler artifact export failed for '%s': %s", item.get("instance"), zip_err)
 
     with _STATE_LOCK:
         schedules = _load_instance_schedules()
@@ -1657,6 +1780,38 @@ def cancel_instance_schedule(schedule_id: str):
                 return jsonify({"ok": True, "schedule": _schedule_to_api_model(candidate)})
 
     return jsonify({"ok": True})
+
+
+@app.route("/ui-api/instance-schedules/<schedule_id>/artifact", methods=["GET"])
+def download_instance_schedule_artifact(schedule_id: str):
+    sid = str(schedule_id or "").strip()
+    if not sid:
+        return jsonify({"error": "invalid schedule id"}), 400
+
+    artifact_path = ""
+    with _STATE_LOCK:
+        schedules = _load_instance_schedules()
+        for item in schedules:
+            if str(item.get("id", "") or "") != sid:
+                continue
+            artifact_path = str(item.get("artifact_path", "") or "").strip()
+            break
+
+    if not artifact_path:
+        return jsonify({"error": "schedule artifact not available"}), 404
+
+    artifact_name = pathlib.Path(artifact_path).name
+    artifact_file = INSTANCE_SCHEDULE_ARTIFACTS_DIR / artifact_name
+    if not artifact_file.exists() or not artifact_file.is_file():
+        return jsonify({"error": "schedule artifact not available"}), 404
+
+    return send_from_directory(
+        INSTANCE_SCHEDULE_ARTIFACTS_DIR,
+        artifact_name,
+        as_attachment=True,
+        download_name=artifact_name,
+        mimetype="application/zip",
+    )
 
 
 @app.route("/ui-api/instances/<name>/reconfigure", methods=["PUT"])

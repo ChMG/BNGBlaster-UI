@@ -54,16 +54,19 @@ BNG BLASTER UI - 5 MIN ONBOARDING
 	- list schedules via GET /ui-api/instance-schedules
 	- delete non-running schedules via DELETE /ui-api/instance-schedules/{schedule_id}
 	- abort running schedules early via POST /ui-api/instance-schedules/{schedule_id}/cancel
-	- scheduler statuses: scheduled, running, completed, cancelled, failed
-	- while schedule status is scheduled/running, manual instance actions are blocked
+	- download artifact ZIP via GET /ui-api/instance-schedules/{schedule_id}/artifact
+	- scheduler statuses: scheduled, running, waiting for artifacts, completed, cancelled, failed
+	- while schedule status is scheduled/running/waiting for artifacts, manual instance actions are blocked
 	  (start/stop/kill/edit/delete)
 	- if both stop_time and runtime_seconds are sent, stop_time is used
+	- artifact collection timing defaults: 30s initial delay, 30s wait window, 2s poll interval
 
 6) Important data/config paths
 - Runtime config: config.json
 - Templates storage: config-templates/
 - Runtime state storage: state/ (includes instance-start-options.json)
 - Scheduler state storage: state/instance-schedules.json
+- Scheduler artifact storage: state/instance-schedule-artifacts/
 - OpenAPI spec used by explorer: static/bngblaster-controler-swagger.yaml
 - UI API OpenAPI spec: static/ui-api-swagger.yaml
 - Local chart runtime (offline): static/vendor/echarts.min.js

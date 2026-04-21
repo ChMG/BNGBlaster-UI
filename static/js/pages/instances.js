@@ -203,7 +203,7 @@ export default {
               <td class="mono text-xs">{{ item.instance }}</td>
               <td>
                 <span class="badge badge-xs"
-                  :class="item.status === 'scheduled' ? 'badge-info' : item.status === 'running' ? 'badge-success' : item.status === 'completed' ? 'badge-ghost' : item.status === 'cancelled' ? 'badge-warning' : 'badge-error'">
+                  :class="item.status === 'scheduled' ? 'badge-info' : item.status === 'running' ? 'badge-success' : item.status === 'waiting for artifacts' ? 'badge-warning' : item.status === 'completed' ? 'badge-ghost' : item.status === 'cancelled' ? 'badge-warning' : 'badge-error'">
                   {{ item.status }}
                 </span>
               </td>
@@ -214,7 +214,13 @@ export default {
               <td>
                 <div class="flex items-center gap-1">
                   <button v-if="item.status === 'running'" class="btn btn-ghost btn-xs text-warning" @click="cancelSchedule(item)">Abort</button>
-                  <button class="btn btn-ghost btn-xs text-error" @click="deleteSchedule(item)" :disabled="item.status === 'running'">Delete</button>
+                  <a v-if="item.artifact_available"
+                     class="btn btn-ghost btn-xs"
+                    :href="'/ui-api/instance-schedules/' + encodeURIComponent(item.id) + '/artifact'"
+                     download>
+                    Download
+                  </a>
+                  <button class="btn btn-ghost btn-xs text-error" @click="deleteSchedule(item)" :disabled="item.status === 'running' || item.status === 'waiting for artifacts'">Delete</button>
                 </div>
               </td>
             </tr>
@@ -1074,7 +1080,7 @@ export default {
 
     function isInstanceScheduled(name) {
       return schedules.value.some(
-        s => s.instance === name && (s.status === "scheduled" || s.status === "running")
+        s => s.instance === name && (s.status === "scheduled" || s.status === "running" || s.status === "waiting for artifacts")
       );
     }
 

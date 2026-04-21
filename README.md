@@ -193,6 +193,9 @@ Gunicorn runtime options can be customized via environment variables:
 - `APP_VERSION_CHECK_URL` (default: `https://github.com/ChMG/BNGBlaster-UI/blob/main/VERSION`)
 - `INSTANCE_SCHEDULER_ENABLED` (default: `1`)
 - `INSTANCE_SCHEDULER_INTERVAL_SEC` (default: `1`, minimum: `0.5`)
+- `INSTANCE_SCHEDULER_ARTIFACT_INITIAL_DELAY_SEC` (default: `30`, minimum: `0`)
+- `INSTANCE_SCHEDULER_ARTIFACT_WAIT_SEC` (default: `30`, minimum: `0`)
+- `INSTANCE_SCHEDULER_ARTIFACT_POLL_SEC` (default: `2`, minimum: `0.2`)
 - `CONFIG_FILE` (optional, default: `./config.json`)
 
 Controller, Grafana and OIDC settings are loaded from `config.json`.
@@ -449,8 +452,16 @@ curl "http://localhost:8080/ui-api/instance-schedules?active=1"
 
 Scheduler API notes:
 
-- `?active=1` returns only schedules with status `scheduled` or `running`.
+- `?active=1` returns only schedules with status `scheduled`, `running`, or `waiting for artifacts`.
 - If both `stop_time` and `runtime_seconds` are sent, `stop_time` takes precedence.
+- After scheduler stop/cancel, the UI backend downloads available instance files
+	(`config.json`, `run.json`, `run.log`, `run_report.json`, `run.pcap`,
+	`run.stdout`, `run.stderr`) and stores them as a ZIP artifact per schedule.
+- Artifact collection waits `INSTANCE_SCHEDULER_ARTIFACT_INITIAL_DELAY_SEC`
+	before the first download attempt, then polls for up to
+	`INSTANCE_SCHEDULER_ARTIFACT_WAIT_SEC` (in steps of
+	`INSTANCE_SCHEDULER_ARTIFACT_POLL_SEC`) to catch files that are generated
+	shortly after stop/cancel.
 
 Delete schedule:
 
@@ -462,6 +473,13 @@ Cancel running schedule early:
 
 ```bash
 curl -X POST http://localhost:8080/ui-api/instance-schedules/<schedule-id>/cancel
+```
+
+Download scheduler artifact ZIP:
+
+```bash
+curl -L -o schedule-artifact.zip \
+	http://localhost:8080/ui-api/instance-schedules/<schedule-id>/artifact
 ```
 
 ## VS Code Debugging
