@@ -225,6 +225,8 @@ Use `config.json` in project root for runtime configuration:
 		"issuer_url": "http://localhost:8090/realms/master",
 		"client_id": "bngblaster-ui",
 		"client_secret": "change-me",
+		"bearer_enforce_audience": true,
+		"bearer_allowed_audiences": "bngblaster-ui",
 		"scopes": "openid profile email",
 		"groups_claim": "groups",
 		"allowed_groups": "bngblaster-user",
@@ -262,6 +264,7 @@ Behavior when enabled:
 - After successful login, users are redirected back to the original page.
 - A logout link is shown in the sidebar backend section.
 - Optional group-based or role-based restriction can be enforced with `OIDC_ALLOWED_GROUPS` and `OIDC_ALLOWED_ROLES`.
+- Bearer tokens are validated against expected audience/client binding (`bearer_allowed_audiences` or fallback to `client_id`) when `bearer_enforce_audience` is enabled.
 
 Minimal config example:
 
@@ -272,6 +275,8 @@ Minimal config example:
 	"client_id": "bngblaster-ui",
 	"client_secret": "your-client-secret",
 	"bearer_enabled": true,
+	"bearer_enforce_audience": true,
+	"bearer_allowed_audiences": "bngblaster-ui",
 	"groups_claim": "groups",
 	"allowed_groups": "/bngblaster-admin",
 	"roles_claim": "realm_access.roles",

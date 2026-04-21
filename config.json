@@ -20,6 +20,9 @@
         "app_secret_key": "change-me-long-random-dev-secret",
         "redirect_uri": "http://localhost:8080/ui-api/auth/callback",
         "post_logout_redirect_uri": "http://localhost:8080/",
-        "bearer_enabled": true
+        "bearer_enabled": true,
+	    "bearer_enforce_audience": true,
+	    "bearer_allowed_audiences": "bngblaster-ui",
+        "jwks_cache_sec": 3600
     }
 }

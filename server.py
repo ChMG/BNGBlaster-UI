@@ -239,6 +239,22 @@ _oidc_bearer_enabled_raw = _oidc_cfg.get("bearer_enabled", os.environ.get("OIDC_
 OIDC_BEARER_ENABLED = (
     _oidc_bearer_enabled_raw if isinstance(_oidc_bearer_enabled_raw, bool) else _is_truthy(_oidc_bearer_enabled_raw, default=True)
 )
+_oidc_bearer_enforce_audience_raw = _oidc_cfg.get(
+    "bearer_enforce_audience", os.environ.get("OIDC_BEARER_ENFORCE_AUDIENCE", "1")
+)
+OIDC_BEARER_ENFORCE_AUDIENCE = (
+    _oidc_bearer_enforce_audience_raw
+    if isinstance(_oidc_bearer_enforce_audience_raw, bool)
+    else _is_truthy(_oidc_bearer_enforce_audience_raw, default=True)
+)
+OIDC_BEARER_ALLOWED_AUDIENCES = _parse_csv_set(
+    _normalize_csv_input(
+        _oidc_cfg.get(
+            "bearer_allowed_audiences",
+            os.environ.get("OIDC_BEARER_ALLOWED_AUDIENCES", OIDC_CLIENT_ID),
+        )
+    )
+)
 OIDC_GROUPS_CLAIM = str(_oidc_cfg.get("groups_claim", os.environ.get("OIDC_GROUPS_CLAIM", "groups")) or "groups").strip()
 OIDC_ALLOWED_GROUPS = _parse_csv_set(
     _normalize_csv_input(_oidc_cfg.get("allowed_groups", os.environ.get("OIDC_ALLOWED_GROUPS", "")))
@@ -419,7 +435,38 @@ def _oidc_verify_bearer_token(token: str) -> dict:
     issuer = str(payload.get("iss", "") or "").strip().rstrip("/")
     if OIDC_ISSUER_URL and issuer != OIDC_ISSUER_URL:
         return {}
+
+    if OIDC_BEARER_ENFORCE_AUDIENCE:
+        token_audiences = _oidc_extract_token_audiences(payload)
+        required_audiences = set(OIDC_BEARER_ALLOWED_AUDIENCES)
+        if not required_audiences and OIDC_CLIENT_ID:
+            required_audiences.add(OIDC_CLIENT_ID)
+        if required_audiences and not (token_audiences & required_audiences):
+            return {}
+
     return payload if isinstance(payload, dict) else {}
+
+
+def _oidc_extract_token_audiences(payload: dict) -> set[str]:
+    result: set[str] = set()
+    aud = payload.get("aud")
+    if isinstance(aud, str):
+        value = aud.strip()
+        if value:
+            result.add(value)
+    elif isinstance(aud, list):
+        for item in aud:
+            if isinstance(item, str):
+                value = item.strip()
+                if value:
+                    result.add(value)
+
+    azp = payload.get("azp")
+    if isinstance(azp, str):
+        value = azp.strip()
+        if value:
+            result.add(value)
+    return result
 
 
 def _oidc_try_bearer_authentication() -> str:
@@ -624,7 +671,8 @@ def _proxy(path: str) -> Response:
     if request.query_string:
         url += "?" + request.query_string.decode("utf-8", errors="replace")
 
-    fwd_headers = {k: v for k, v in request.headers if k.lower() not in _HOP_BY_HOP}
+    # Do not forward UI Authorization tokens to backend controllers.
+    fwd_headers = {k: v for k, v in request.headers if k.lower() not in _HOP_BY_HOP and k.lower() != "authorization"}
 
     try:
         up = req_lib.request(
