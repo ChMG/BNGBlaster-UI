@@ -1,5 +1,5 @@
 // pages/instances.js — Instance table with auto-refresh, create/edit modal
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { api, usePoller } from "../api.js";
 
 const STATUS_CLASS = {
@@ -701,6 +701,32 @@ export default {
             </div>
           </div>
 
+          <!-- Log Viewer -->
+          <div class="bg-base-300 rounded-lg overflow-hidden">
+            <div class="flex items-center justify-between px-3 py-2 cursor-pointer select-none" @click="toggleLogViewer">
+              <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">Log Viewer (run.log)</span>
+              <div class="flex items-center gap-2" @click.stop>
+                <label class="flex items-center gap-1 text-[11px] text-base-content/60 cursor-pointer select-none">
+                  <input type="checkbox" class="toggle toggle-xs toggle-success" v-model="logAutoScroll" />
+                  Auto-Scroll
+                </label>
+                <label class="flex items-center gap-1 text-[11px] text-base-content/60">
+                  <span>Lines:</span>
+                  <input type="number" v-model.number="logLineLimit" min="1" max="10000" class="input input-xs input-bordered bg-base-300 w-16" @click.stop />
+                </label>
+                <span class="text-[11px] text-base-content/40">{{ logUpdated }}</span>
+                <button class="btn btn-xs btn-ghost" @click="loadRunLog" :disabled="logLoading || !logViewerExpanded">Reload</button>
+                <span class="text-xs text-base-content/40 pointer-events-none">{{ logViewerExpanded ? '▲' : '▼' }}</span>
+              </div>
+            </div>
+            <div v-show="logViewerExpanded" class="px-3 pb-3">
+              <div v-if="logLoading && !logContent" class="text-xs text-base-content/50 py-2">Loading...</div>
+              <div v-else-if="logError" class="text-xs text-error py-2">{{ logError }}</div>
+              <pre ref="logPreRef" v-else-if="logContent" class="bg-base-100 rounded-lg p-2 text-xs mono overflow-auto max-h-96 whitespace-pre-wrap break-all">{{ logContent }}</pre>
+              <div v-else class="text-xs text-base-content/50 py-2">No log data available.</div>
+            </div>
+          </div>
+
           <div>
             <div class="text-xs font-semibold text-base-content/50 mb-1 uppercase tracking-wide">Download Files</div>
             <div class="flex flex-wrap gap-2">
@@ -882,6 +908,17 @@ export default {
     const sessionDrainInProgress = ref(false);
     const templateSaving = ref(false);
     let sessionTimer = null;
+
+    // Log viewer state
+    const logViewerExpanded = ref(false);
+    const logContent = ref("");
+    const logLoading = ref(false);
+    const logError = ref("");
+    const logUpdated = ref("—");
+    const logAutoScroll = ref(true);
+    const logLineLimit = ref(200);
+    const logPreRef = ref(null);
+    let logViewerTimer = null;
     let _cfgFetchGen = 0;  // incremented whenever the user takes ownership of form.value.config
 
     // interface variable substitution (template load in edit popup)
@@ -1685,6 +1722,10 @@ export default {
       selectedSession.value = null;
       sessionInfoData.value = null;
       sessionPage.value = 1;
+      logViewerExpanded.value = false;
+      logContent.value = "";
+      logError.value = "";
+      logUpdated.value = "—";
       detailRef.value.showModal();
       await Promise.all([refreshDetail(), loadSessions()]);
       restartSessionPoller();
@@ -2058,6 +2099,54 @@ export default {
       sessionTimer = null;
     }
 
+    async function loadRunLog() {
+      if (!detailInst.value) return;
+      logLoading.value = true;
+      logError.value = "";
+      try {
+        const text = await api.get(`/api/v1/instances/${encodeURIComponent(detailInst.value.name)}/run.log?_=${Date.now()}`);
+        let content = typeof text === "string" ? text : JSON.stringify(text, null, 2);
+        // Limit to last N lines
+        const lines = content.split("\n");
+        if (lines.length > logLineLimit.value) {
+          content = lines.slice(-logLineLimit.value).join("\n");
+        }
+        logContent.value = content;
+        logUpdated.value = new Date().toLocaleTimeString("en-US");
+        if (logAutoScroll.value) {
+          await nextTick();
+          if (logPreRef.value) logPreRef.value.scrollTop = logPreRef.value.scrollHeight;
+        }
+      } catch (e) {
+        logContent.value = "";
+        if (e.status === 404) {
+          logError.value = "Log file not found. Make sure logging is enabled when starting the instance.";
+        } else {
+          logError.value = e.message || String(e);
+        }
+      } finally {
+        logLoading.value = false;
+      }
+    }
+
+    function stopLogViewerPoller() {
+      if (!logViewerTimer) return;
+      clearInterval(logViewerTimer);
+      logViewerTimer = null;
+    }
+
+    function toggleLogViewer() {
+      logViewerExpanded.value = !logViewerExpanded.value;
+    }
+
+    watch(logViewerExpanded, (expanded) => {
+      stopLogViewerPoller();
+      if (expanded) {
+        loadRunLog();
+        logViewerTimer = setInterval(() => { loadRunLog().catch(() => {}); }, 10000);
+      }
+    });
+
     function restartSessionPoller() {
       stopSessionPoller();
       if (!sessionAutoOn.value || !detailInst.value || !isStartedLike(detailInst.value.status)) return;
@@ -2077,6 +2166,11 @@ export default {
 
     function onDetailClose() {
       stopSessionPoller();
+      stopLogViewerPoller();
+      logViewerExpanded.value = false;
+      logContent.value = "";
+      logError.value = "";
+      logUpdated.value = "—";
       detailInst.value = null;
       selectedSession.value = null;
       sessionInfoData.value = null;
@@ -2114,6 +2208,7 @@ export default {
 
     onUnmounted(() => {
       stopSessionPoller();
+      stopLogViewerPoller();
     });
 
     watch(sessions, (rows) => {
@@ -2169,6 +2264,8 @@ export default {
       onAutoChange, onIntervalChange,
       onScheduleStopTimeInput,
       onSessionAutoChange, onSessionIntervalChange, onDetailClose,
+      logViewerExpanded, logContent, logLoading, logError, logUpdated, logAutoScroll, logLineLimit, logPreRef,
+      loadRunLog, toggleLogViewer,
     };
   },
 };
