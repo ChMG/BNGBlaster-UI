@@ -142,8 +142,16 @@ export default {
           <h2 class="text-lg font-semibold text-base-content">Instance Scheduler</h2>
           <p class="text-xs text-base-content/50">Start and stop instances at defined times.</p>
         </div>
+        <button class="btn btn-xs btn-ghost" @click="toggleSchedulerExpanded">
+          {{ schedulerExpanded ? 'Collapse' : 'Expand' }}
+        </button>
       </div>
 
+      <p v-if="!schedulerExpanded" class="text-xs text-base-content/50">
+        {{ schedules.length ? (schedules.length + ' schedule(s) configured.') : 'No schedules configured.' }}
+      </p>
+
+      <div v-show="schedulerExpanded" class="space-y-4">
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
         <div class="lg:col-span-3">
           <label class="label pb-1"><span class="label-text text-xs font-semibold">Instance</span></label>
@@ -230,6 +238,7 @@ export default {
 
           </tbody>
         </table>
+      </div>
       </div>
     </section>
 
@@ -809,6 +818,8 @@ export default {
     const schedulerEnabled = ref(true);
     const schedulesLoading = ref(false);
     const schedules = ref([]);
+    const schedulerExpanded = ref(false);
+    const schedulerExpansionInitialized = ref(false);
     const scheduleForm = ref({
       instance: "",
       startTime: "",
@@ -1104,6 +1115,10 @@ export default {
         const data = await api.get(`/ui-api/instance-schedules${qs}`);
         const list = Array.isArray(data?.schedules) ? data.schedules : [];
         schedules.value = list;
+        if (!schedulerExpansionInitialized.value) {
+          schedulerExpanded.value = list.length > 0;
+          schedulerExpansionInitialized.value = true;
+        }
       } catch (e) {
         if (!silent) {
           showToast(`Failed to load schedules: ${e.message}`, "error");
@@ -1155,12 +1170,19 @@ export default {
         await api.post("/ui-api/instance-schedules", payload);
         showToast(`Schedule created for ${instance}`);
         initializeScheduleForm();
+        schedulerExpanded.value = true;
+        schedulerExpansionInitialized.value = true;
         await loadSchedules();
       } catch (e) {
         scheduleForm.value.error = e.message;
       } finally {
         scheduleForm.value.saving = false;
       }
+    }
+
+    function toggleSchedulerExpanded() {
+      schedulerExpanded.value = !schedulerExpanded.value;
+      schedulerExpansionInitialized.value = true;
     }
 
     async function deleteSchedule(item) {
@@ -2119,7 +2141,7 @@ export default {
 
     return {
       instances, instanceSearch, filteredInstances, loading, lastUpdated, autoOn, intervalSec, toast,
-      schedulerEnabled, schedulesLoading, schedules, scheduleForm,
+      schedulerEnabled, schedulesLoading, schedules, schedulerExpanded, scheduleForm,
       templates, templateSearchQuery, filteredTemplates, modalRef, startOptionsRef, editing, form, startOptions, startLoggingFlags, startMetricFlags, startReportFlags,
       detailRef, detailInst, cmdName, cmdArgs, cmdResult, downloadFiles,
       sessionsLoading, sessionsError, sessions, filteredSessions, sessionsUpdated,
@@ -2137,7 +2159,7 @@ export default {
       stopAndReapplyModal, stopAndReapplyPending,
       formatCounterCell, formatScheduleTime, formatRuntimeMinutes,
       loadAll, action, deleteInst, openCreate, openEdit, closeModal,
-      loadSchedules, createSchedule, deleteSchedule, cancelSchedule, isInstanceScheduled,
+      loadSchedules, createSchedule, deleteSchedule, cancelSchedule, isInstanceScheduled, toggleSchedulerExpanded,
       openStartOptions, closeStartOptions, confirmStartWithOptions, toggleStartLoggingFlag, toggleStartMetricFlag, toggleStartReportFlag,
       applyTemplate, confirmApplyTemplateWithVars, saveInstance, proceedStopApplyRestart, openDetail, sendCommand, loadSessions,
       runSessionAction, restartSession, sessionActionMeta, prevSessionPage, nextSessionPage,
