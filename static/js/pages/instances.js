@@ -704,8 +704,15 @@ export default {
           <!-- Log Viewer -->
           <div class="bg-base-300 rounded-lg overflow-hidden">
             <div class="flex items-center justify-between px-3 py-2 cursor-pointer select-none" @click="toggleLogViewer">
-              <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">Log Viewer (run.log)</span>
+              <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">Log Viewer ({{ logSource }})</span>
               <div class="flex items-center gap-2" @click.stop>
+                <label class="flex items-center gap-2 text-xs font-semibold text-base-content/70">
+                  <span>Log File:</span>
+                  <select class="select select-sm bg-base-100 border border-base-400 w-32" v-model="logSource" @click.stop>
+                    <option value="run.log">run.log</option>
+                    <option value="run.stdout">run.stdout</option>
+                  </select>
+                </label>
                 <label class="flex items-center gap-1 text-[11px] text-base-content/60 cursor-pointer select-none">
                   <input type="checkbox" class="toggle toggle-xs toggle-success" v-model="logAutoScroll" />
                   Auto-Scroll
@@ -915,6 +922,7 @@ export default {
     const logLoading = ref(false);
     const logError = ref("");
     const logUpdated = ref("—");
+    const logSource = ref("run.stdout");
     const logAutoScroll = ref(true);
     const logLineLimit = ref(200);
     const logPreRef = ref(null);
@@ -2104,13 +2112,10 @@ export default {
       logLoading.value = true;
       logError.value = "";
       try {
-        const text = await api.get(`/api/v1/instances/${encodeURIComponent(detailInst.value.name)}/run.log?_=${Date.now()}`);
-        let content = typeof text === "string" ? text : JSON.stringify(text, null, 2);
-        // Limit to last N lines
-        const lines = content.split("\n");
-        if (lines.length > logLineLimit.value) {
-          content = lines.slice(-logLineLimit.value).join("\n");
-        }
+        const limit = Math.max(1, Math.min(10000, Number(logLineLimit.value) || 200));
+        const source = logSource.value === "run.stdout" ? "run.stdout" : "run.log";
+        const text = await api.get(`/ui-api/instances/${encodeURIComponent(detailInst.value.name)}/run-log?source=${encodeURIComponent(source)}&lines=${limit}&_=${Date.now()}`);
+        const content = typeof text === "string" ? text : JSON.stringify(text, null, 2);
         logContent.value = content;
         logUpdated.value = new Date().toLocaleTimeString("en-US");
         if (logAutoScroll.value) {
@@ -2120,7 +2125,11 @@ export default {
       } catch (e) {
         logContent.value = "";
         if (e.status === 404) {
-          logError.value = "Log file not found. Make sure logging is enabled when starting the instance.";
+          if (logSource.value === "run.log") {
+            logError.value = "Log file not found. Make sure logging is enabled when starting the instance.";
+          } else {
+            logError.value = "Selected log file not found.";
+          }
         } else {
           logError.value = e.message || String(e);
         }
@@ -2144,6 +2153,12 @@ export default {
       if (expanded) {
         loadRunLog();
         logViewerTimer = setInterval(() => { loadRunLog().catch(() => {}); }, 10000);
+      }
+    });
+
+    watch(logSource, () => {
+      if (logViewerExpanded.value) {
+        loadRunLog();
       }
     });
 
@@ -2264,7 +2279,7 @@ export default {
       onAutoChange, onIntervalChange,
       onScheduleStopTimeInput,
       onSessionAutoChange, onSessionIntervalChange, onDetailClose,
-      logViewerExpanded, logContent, logLoading, logError, logUpdated, logAutoScroll, logLineLimit, logPreRef,
+      logViewerExpanded, logContent, logLoading, logError, logUpdated, logSource, logAutoScroll, logLineLimit, logPreRef,
       loadRunLog, toggleLogViewer,
     };
   },

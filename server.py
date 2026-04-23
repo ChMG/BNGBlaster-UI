@@ -1814,6 +1814,35 @@ def download_instance_schedule_artifact(schedule_id: str):
     )
 
 
+@app.route("/ui-api/instances/<name>/run-log", methods=["GET"])
+def get_instance_run_log(name: str):
+    target = _resolve_selected_target(request.headers.get("X-Bngblaster-Target", ""), strict=True)
+    if target is None:
+        return Response("Invalid X-Bngblaster-Target", status=400, mimetype="text/plain")
+
+    source = (request.args.get("source", "run.log") or "run.log").strip()
+    if source not in {"run.log", "run.stdout"}:
+        return Response("Invalid source", status=400, mimetype="text/plain")
+
+    lines_raw = (request.args.get("lines", "200") or "200").strip()
+    try:
+        lines = int(lines_raw)
+    except ValueError:
+        lines = 200
+    lines = max(1, min(lines, 10000))
+
+    up = _backend_request(target, "GET", f"/api/v1/instances/{name}/{source}")
+    if up is None:
+        return Response("Backend not reachable", status=502, mimetype="text/plain")
+    if not up.ok:
+        return Response(up.text or up.reason or "Backend error", status=up.status_code, mimetype="text/plain")
+
+    content = up.text or ""
+    all_lines = content.splitlines()
+    tail = "\n".join(all_lines[-lines:]) if all_lines else ""
+    return Response(tail, status=200, mimetype="text/plain")
+
+
 @app.route("/ui-api/instances/<name>/reconfigure", methods=["PUT"])
 def reconfigure_instance(name: str):
     target = _resolve_selected_target(request.headers.get("X-Bngblaster-Target", ""), strict=True)

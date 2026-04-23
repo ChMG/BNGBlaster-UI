@@ -275,6 +275,69 @@ paths:
               schema:
                 $ref: '#/components/schemas/CleanupResult'
 
+  /ui-api/instances/{name}/run-log:
+    get:
+      tags: [start-options]
+      summary: Get tail of instance runtime log file
+      description: >-
+        Fetches the selected runtime log file from the backend target and
+        returns only the last N lines as plain text.
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+          description: Instance name
+        - in: query
+          name: source
+          required: false
+          schema:
+            type: string
+            enum: [run.log, run.stdout]
+            default: run.log
+          description: Runtime log file to read.
+        - in: query
+          name: lines
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+            default: 200
+          description: Number of last log lines to return.
+        - in: header
+          name: X-Bngblaster-Target
+          required: false
+          schema:
+            type: string
+          description: Selected backend target URL (or numeric index).
+      responses:
+        '200':
+          description: Log tail as plain text
+          content:
+            text/plain:
+              schema:
+                type: string
+        '400':
+          description: Invalid target selection
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Log file not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '502':
+          description: Backend not reachable
+          content:
+            text/plain:
+              schema:
+                type: string
+
   /ui-api/instances/{name}/reconfigure:
     put:
       tags: [start-options]
