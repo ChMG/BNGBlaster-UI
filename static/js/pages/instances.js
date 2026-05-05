@@ -587,8 +587,9 @@ export default {
 
           <div>
             <div class="flex items-center justify-between mb-2">
-              <div class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">
-                Sessions
+              <div class="flex items-center gap-3">
+                <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">Sessions</span>
+                <span class="text-[11px] text-base-content/50">{{ formatCounterCell(detailSessionCounters.sessions) }} total &middot; {{ formatCounterCell(detailSessionCounters.sessionsEstablished) }} established &middot; {{ formatCounterCell(detailSessionCounters.sessionsOutstanding) }} outstanding</span>
               </div>
               <div class="flex items-center gap-2">
                 <label class="flex items-center gap-1 text-[11px] text-base-content/60 cursor-pointer select-none">
@@ -609,22 +610,6 @@ export default {
                 />
                 <span class="text-[11px] text-base-content/40">{{ sessionsUpdated }}</span>
                 <button class="btn btn-xs btn-ghost" @click="loadSessions" :disabled="sessionsLoading || !isDetailStarted">Reload</button>
-              </div>
-            </div>
-            <div class="mb-2 rounded-lg border border-base-300 bg-base-300/40 px-3 py-2">
-              <div class="grid grid-cols-3 gap-3 text-xs">
-                <div>
-                  <div class="text-base-content/50 uppercase tracking-wide">Sessions</div>
-                  <div class="mono text-sm">{{ formatCounterCell(detailSessionCounters.sessions) }}</div>
-                </div>
-                <div>
-                  <div class="text-base-content/50 uppercase tracking-wide">Established</div>
-                  <div class="mono text-sm">{{ formatCounterCell(detailSessionCounters.sessionsEstablished) }}</div>
-                </div>
-                <div>
-                  <div class="text-base-content/50 uppercase tracking-wide">Outstanding</div>
-                  <div class="mono text-sm">{{ formatCounterCell(detailSessionCounters.sessionsOutstanding) }}</div>
-                </div>
               </div>
             </div>
             <div v-if="sessionsLoading && !sessions.length" class="bg-base-300 rounded-lg p-3 text-xs text-base-content/50">
