@@ -246,12 +246,14 @@ export default {
     <div class="rounded-xl overflow-hidden border border-base-300">
       <table class="table table-zebra w-full stable-table">
         <colgroup>
-          <col style="width: 26%" />
-          <col style="width: 13%" />
+          <col style="width: 27%" />
+          <col style="width: 10%" />
           <col style="width: 8%" />
           <col style="width: 8%" />
           <col style="width: 8%" />
-          <col style="width: 37%" />
+          <col style="width: 7%" />
+          <col style="width: 8%" />
+          <col style="width: 24%" />
         </colgroup>
         <thead class="bg-base-200">
           <tr>
@@ -260,6 +262,8 @@ export default {
             <th class="text-base-content/60 font-semibold text-right text-xs">Sessions</th>
             <th class="text-base-content/60 font-semibold text-right text-xs">Established</th>
             <th class="text-base-content/60 font-semibold text-right text-xs">Outstanding</th>
+            <th class="text-base-content/60 font-semibold text-xs">Test State</th>
+            <th class="text-base-content/60 font-semibold text-right text-xs">Test Duration</th>
             <th class="text-base-content/60 font-semibold">Actions</th>
           </tr>
         </thead>
@@ -282,10 +286,16 @@ export default {
             <td class="mono text-right text-xs" :class="isStartedLike(inst.status) ? 'text-base-content' : 'text-base-content/30'">
               {{ formatCounterCell(inst.sessionsOutstanding) }}
             </td>
+            <td class="mono text-xs" :class="isStartedLike(inst.status) ? 'text-base-content' : 'text-base-content/30'">
+              {{ isStartedLike(inst.status) ? (inst.testState || '—') : '—' }}
+            </td>
+            <td class="mono text-right text-xs" :class="isStartedLike(inst.status) ? 'text-base-content' : 'text-base-content/30'">
+              {{ isStartedLike(inst.status) ? formatDurationDHMS(inst.testDurationSeconds) : '—' }}
+            </td>
             <td>
               <div class="flex flex-wrap gap-1">
                 <button class="btn btn-xs btn-success"  @click="openStartOptions(inst)"  :disabled="inst.busy || isStartedLike(inst.status) || isInstanceScheduled(inst.name)" :title="isInstanceScheduled(inst.name) ? 'Blocked by active schedule' : undefined">▶ Start</button>
-                <button class="btn btn-xs btn-warning"  @click="action(inst,'stop')"   :disabled="inst.busy || !isStartedLike(inst.status) || isInstanceScheduled(inst.name)" :title="isInstanceScheduled(inst.name) ? 'Blocked by active schedule' : undefined">⏹ Stop</button>
+                <button class="btn btn-xs btn-warning"  @click="action(inst,'stop')"   :disabled="inst.busy || !isStartedLike(inst.status) || isInstanceScheduled(inst.name) || inst.testState === 'teardown'" :title="inst.testState === 'teardown' ? 'Teardown in progress' : isInstanceScheduled(inst.name) ? 'Blocked by active schedule' : undefined">⏹ Stop</button>
                 <button class="btn btn-xs btn-error"    @click="action(inst,'kill')"   :disabled="inst.busy || !isStartedLike(inst.status) || isInstanceScheduled(inst.name)" :title="isInstanceScheduled(inst.name) ? 'Blocked by active schedule' : undefined">⚡ Kill</button>
                 <button class="btn btn-xs btn-ghost"    @click="openEdit(inst)"        :disabled="inst.busy || isInstanceScheduled(inst.name)" :title="isInstanceScheduled(inst.name) ? 'Blocked by active schedule' : undefined">✏ Edit</button>
                 <button class="btn btn-xs btn-ghost text-error" @click="deleteInst(inst)" :disabled="inst.busy || isInstanceScheduled(inst.name)" :title="isInstanceScheduled(inst.name) ? 'Blocked by active schedule' : undefined">🗑</button>
@@ -293,17 +303,17 @@ export default {
             </td>
           </tr>
           <tr v-if="!loading && !instances.length">
-            <td colspan="6" class="text-center text-base-content/30 py-10">
+            <td colspan="8" class="text-center text-base-content/30 py-10">
               No instances available. Create one with "+ New Instance".
             </td>
           </tr>
           <tr v-if="!loading && instances.length && !filteredInstances.length">
-            <td colspan="6" class="text-center text-base-content/30 py-10">
+            <td colspan="8" class="text-center text-base-content/30 py-10">
               No instances match search.
             </td>
           </tr>
           <tr v-if="loading && !instances.length">
-            <td colspan="6" class="text-center py-10">
+            <td colspan="8" class="text-center py-10">
               <span class="loading loading-dots loading-md text-base-content/30"></span>
             </td>
           </tr>
@@ -581,8 +591,15 @@ export default {
         <div class="space-y-3">
           <div class="flex flex-wrap gap-2">
             <button class="btn btn-sm btn-success"  @click="openStartOptions(detailInst)" :disabled="detailInst.busy || isStartedLike(detailInst.status) || isInstanceScheduled(detailInst.name)" :title="isInstanceScheduled(detailInst.name) ? 'Blocked by active schedule' : undefined">▶ Start</button>
-            <button class="btn btn-sm btn-warning"  @click="action(detailInst,'stop')" :disabled="detailInst.busy || !isStartedLike(detailInst.status) || isInstanceScheduled(detailInst.name)" :title="isInstanceScheduled(detailInst.name) ? 'Blocked by active schedule' : undefined">⏹ Stop</button>
+            <button class="btn btn-sm btn-warning"  @click="action(detailInst,'stop')" :disabled="detailInst.busy || !isStartedLike(detailInst.status) || isInstanceScheduled(detailInst.name) || testInfoState === 'teardown'" :title="testInfoState === 'teardown' ? 'Teardown in progress' : isInstanceScheduled(detailInst.name) ? 'Blocked by active schedule' : undefined">⏹ Stop</button>
             <button class="btn btn-sm btn-error"    @click="action(detailInst,'kill')" :disabled="detailInst.busy || !isStartedLike(detailInst.status) || isInstanceScheduled(detailInst.name)" :title="isInstanceScheduled(detailInst.name) ? 'Blocked by active schedule' : undefined">⚡ Kill</button>
+            <template v-if="isDetailStarted">
+              <span class="mx-1 h-6 w-px bg-base-content/20"></span>
+              <span class="text-xs text-base-content/60">State: <span class="mono text-base-content">{{ testInfoState }}</span></span>
+              <span class="text-xs text-base-content/60">Duration: <span class="mono text-base-content">{{ formatDurationDHMS(testInfoDurationSeconds) }}</span></span>
+              <span v-if="testInfoLoading" class="text-[11px] text-base-content/40">Loading...</span>
+              <span v-else-if="testInfoError" class="text-[11px] text-error">{{ testInfoError }}</span>
+            </template>
           </div>
 
           <div>
@@ -924,6 +941,10 @@ export default {
     const sessionIntervalSec = ref(3);
     const sessionPage = ref(1);
     const sessionDrainInProgress = ref(false);
+    const testInfoLoading = ref(false);
+    const testInfoError = ref("");
+    const testInfoState = ref("—");
+    const testInfoDurationSeconds = ref(null);
     const templateSaving = ref(false);
     let sessionTimer = null;
 
@@ -1344,6 +1365,16 @@ export default {
       }
     }
 
+    async function fetchTestInfo(instanceName) {
+      const endpoint = `/api/v1/instances/${encodeURIComponent(instanceName)}/_command`;
+      try {
+        const response = await api.post(endpoint, { command: "test-info", arguments: {} });
+        return parseTestInfoResponse(response);
+      } catch {
+        return { state: null, durationSeconds: null };
+      }
+    }
+
     function applyDetailSessionCounters(counters) {
       const next = {
         sessions: counters?.sessions ?? null,
@@ -1374,6 +1405,111 @@ export default {
       });
     }
 
+    function parseTestInfoResponse(payload) {
+      const src = payload && typeof payload === "object" ? payload : {};
+
+      function findFirstValue(obj, keys, normalize, depth = 0) {
+        if (!obj || typeof obj !== "object" || depth > 5) return null;
+        for (const key of keys) {
+          const value = normalize(obj[key]);
+          if (value !== null) return value;
+        }
+        for (const value of Object.values(obj)) {
+          if (value && typeof value === "object") {
+            const nested = findFirstValue(value, keys, normalize, depth + 1);
+            if (nested !== null) return nested;
+          }
+        }
+        return null;
+      }
+
+      const stateKeys = ["state", "test-state", "test_state"];
+      const durationKeys = ["duration", "duration-seconds", "duration_seconds", "runtime", "runtime-seconds", "runtime_seconds"];
+
+      const containers = [
+        src,
+        src.arguments,
+        src.result,
+        src.data,
+        src["test-info"],
+        src.test_info,
+      ].filter(v => v && typeof v === "object");
+
+      let state = null;
+      let duration = null;
+      for (const container of containers) {
+        if (state === null) {
+          state = findFirstValue(
+            container,
+            stateKeys,
+            (value) => {
+              const txt = String(value ?? "").trim();
+              return txt ? txt : null;
+            },
+          );
+        }
+        if (duration === null) {
+          duration = findFirstValue(
+            container,
+            durationKeys,
+            (value) => {
+              const num = Number(value);
+              return Number.isFinite(num) ? Math.max(0, Math.floor(num)) : null;
+            },
+          );
+        }
+        if (state !== null && duration !== null) break;
+      }
+
+      return { state, durationSeconds: duration };
+    }
+
+    function formatDurationDHMS(value) {
+      const total = Number(value);
+      if (!Number.isFinite(total) || total < 0) return "—";
+      const seconds = Math.floor(total);
+      const days = Math.floor(seconds / 86400);
+      const hours = Math.floor((seconds % 86400) / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const secs = seconds % 60;
+
+      const parts = [];
+      if (days > 0) parts.push(`${days}d`);
+      if (hours > 0 || days > 0) parts.push(`${hours}h`);
+      if (minutes > 0 || hours > 0 || days > 0) parts.push(`${minutes}m`);
+      parts.push(`${secs}s`);
+      return parts.join(" ");
+    }
+
+    function resetTestInfo() {
+      testInfoError.value = "";
+      testInfoState.value = "—";
+      testInfoDurationSeconds.value = null;
+    }
+
+    async function loadTestInfo() {
+      if (!detailInst.value) return;
+      if (!isStartedLike(detailInst.value.status)) {
+        resetTestInfo();
+        return;
+      }
+
+      testInfoLoading.value = true;
+      testInfoError.value = "";
+      try {
+        const endpoint = `/api/v1/instances/${encodeURIComponent(detailInst.value.name)}/_command`;
+        const response = await api.post(endpoint, { command: "test-info", arguments: {} });
+        const parsed = parseTestInfoResponse(response);
+        testInfoState.value = parsed.state ?? "—";
+        testInfoDurationSeconds.value = parsed.durationSeconds;
+      } catch (e) {
+        resetTestInfo();
+        testInfoError.value = `test-info failed: ${e.message}`;
+      } finally {
+        testInfoLoading.value = false;
+      }
+    }
+
     async function loadAll() {
       loading.value = true;
       try {
@@ -1395,6 +1531,8 @@ export default {
             sessions: null,
             sessionsEstablished: null,
             sessionsOutstanding: null,
+            testState: null,
+            testDurationSeconds: null,
           };
         });
         // Fetch all statuses in parallel and attach per-instance session counters for started rows.
@@ -1412,10 +1550,15 @@ export default {
               row.sessions = counters.sessions;
               row.sessionsEstablished = counters.sessionsEstablished;
               row.sessionsOutstanding = counters.sessionsOutstanding;
+              const testInfo = await fetchTestInfo(name);
+              row.testState = testInfo.state;
+              row.testDurationSeconds = testInfo.durationSeconds;
             } else {
               row.sessions = null;
               row.sessionsEstablished = null;
               row.sessionsOutstanding = null;
+              row.testState = null;
+              row.testDurationSeconds = null;
             }
           } catch {
             if (row.status !== "unknown" || row.loading) {
@@ -1425,6 +1568,8 @@ export default {
             row.sessions = null;
             row.sessionsEstablished = null;
             row.sessionsOutstanding = null;
+            row.testState = null;
+            row.testDurationSeconds = null;
           }
         }));
         lastUpdated.value = new Date().toLocaleTimeString("en-US");
@@ -1779,6 +1924,7 @@ export default {
       sessionsRaw.value = null;
       sessionsUpdated.value = "—";
       resetDetailSessionCounters();
+      resetTestInfo();
       sessionFilter.value = "";
       selectedSession.value = null;
       sessionInfoData.value = null;
@@ -2133,13 +2279,16 @@ export default {
         if (isStartedLike(detailInst.value.status)) {
           const counters = await fetchSessionCounters(detailInst.value.name);
           applyDetailSessionCounters(counters);
+          await loadTestInfo();
         } else {
           resetDetailSessionCounters();
+          resetTestInfo();
         }
       } catch (e) {
         sessionsRaw.value = null;
         sessionsError.value = `Failed to load sessions: ${e.message}`;
         resetDetailSessionCounters();
+        resetTestInfo();
       } finally {
         sessionsLoading.value = false;
       }
@@ -2249,6 +2398,7 @@ export default {
       logError.value = "";
       logUpdated.value = "—";
       resetDetailSessionCounters();
+      resetTestInfo();
       detailInst.value = null;
       selectedSession.value = null;
       sessionInfoData.value = null;
@@ -2318,6 +2468,7 @@ export default {
       templates, templateSearchQuery, filteredTemplates, modalRef, startOptionsRef, editing, form, startOptions, startLoggingFlags, startMetricFlags, startReportFlags,
       detailRef, detailInst, cmdName, cmdArgs, cmdResult, downloadFiles,
       sessionsLoading, sessionsError, sessions, filteredSessions, sessionsUpdated, detailSessionCounters,
+      testInfoLoading, testInfoError, testInfoState, testInfoDurationSeconds,
       sessionPage, sessionPageCount, sessionPageStart, sessionPageEnd, pagedSessions, emptySessionRows,
       isDetailStarted,
       selectedSession, sessionInfoData, sessionInfoLoading, sessionActionBusy, sessionAutoOn, sessionIntervalSec,
@@ -2330,11 +2481,11 @@ export default {
       instTextVarList, instTextVarValues,
       instIfVarSelectionsComplete, instAvailableInterfaces, instFilteredInterfaces, instTemplatePreviewHtml,
       stopAndReapplyModal, stopAndReapplyPending,
-      formatCounterCell, formatScheduleTime, formatRuntimeMinutes,
+      formatCounterCell, formatScheduleTime, formatRuntimeMinutes, formatDurationDHMS,
       loadAll, action, deleteInst, openCreate, openEdit, closeModal,
       loadSchedules, createSchedule, deleteSchedule, cancelSchedule, isInstanceScheduled, toggleSchedulerExpanded,
       openStartOptions, closeStartOptions, confirmStartWithOptions, toggleStartLoggingFlag, toggleStartMetricFlag, toggleStartReportFlag,
-      applyTemplate, confirmApplyTemplateWithVars, saveInstance, proceedStopApplyRestart, openDetail, sendCommand, loadSessions,
+      applyTemplate, confirmApplyTemplateWithVars, saveInstance, proceedStopApplyRestart, openDetail, sendCommand, loadSessions, loadTestInfo,
       runSessionAction, restartSession, sessionActionMeta, prevSessionPage, nextSessionPage,
       openSessionEdit, closeSessionEdit, saveSessionEdit,
       openSessionDetail, refreshSessionDetail, closeSessionDetail,
