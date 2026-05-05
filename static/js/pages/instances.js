@@ -246,11 +246,12 @@ export default {
     <div class="rounded-xl overflow-hidden border border-base-300">
       <table class="table table-zebra w-full stable-table">
         <colgroup>
-          <col style="width: 30%" />
-          <col style="width: 14%" />
+          <col style="width: 26%" />
+          <col style="width: 13%" />
           <col style="width: 8%" />
-          <col style="width: 10%" />
-          <col style="width: 38%" />
+          <col style="width: 8%" />
+          <col style="width: 8%" />
+          <col style="width: 37%" />
         </colgroup>
         <thead class="bg-base-200">
           <tr>
@@ -258,6 +259,7 @@ export default {
             <th class="text-base-content/60 font-semibold">Status</th>
             <th class="text-base-content/60 font-semibold text-right text-xs">Sessions</th>
             <th class="text-base-content/60 font-semibold text-right text-xs">Established</th>
+            <th class="text-base-content/60 font-semibold text-right text-xs">Outstanding</th>
             <th class="text-base-content/60 font-semibold">Actions</th>
           </tr>
         </thead>
@@ -277,6 +279,9 @@ export default {
             <td class="mono text-right text-xs" :class="isStartedLike(inst.status) ? 'text-base-content' : 'text-base-content/30'">
               {{ formatCounterCell(inst.sessionsEstablished) }}
             </td>
+            <td class="mono text-right text-xs" :class="isStartedLike(inst.status) ? 'text-base-content' : 'text-base-content/30'">
+              {{ formatCounterCell(inst.sessionsOutstanding) }}
+            </td>
             <td>
               <div class="flex flex-wrap gap-1">
                 <button class="btn btn-xs btn-success"  @click="openStartOptions(inst)"  :disabled="inst.busy || isStartedLike(inst.status) || isInstanceScheduled(inst.name)" :title="isInstanceScheduled(inst.name) ? 'Blocked by active schedule' : undefined">▶ Start</button>
@@ -288,17 +293,17 @@ export default {
             </td>
           </tr>
           <tr v-if="!loading && !instances.length">
-            <td colspan="5" class="text-center text-base-content/30 py-10">
+            <td colspan="6" class="text-center text-base-content/30 py-10">
               No instances available. Create one with "+ New Instance".
             </td>
           </tr>
           <tr v-if="!loading && instances.length && !filteredInstances.length">
-            <td colspan="5" class="text-center text-base-content/30 py-10">
+            <td colspan="6" class="text-center text-base-content/30 py-10">
               No instances match search.
             </td>
           </tr>
           <tr v-if="loading && !instances.length">
-            <td colspan="5" class="text-center py-10">
+            <td colspan="6" class="text-center py-10">
               <span class="loading loading-dots loading-md text-base-content/30"></span>
             </td>
           </tr>
@@ -606,6 +611,22 @@ export default {
                 <button class="btn btn-xs btn-ghost" @click="loadSessions" :disabled="sessionsLoading || !isDetailStarted">Reload</button>
               </div>
             </div>
+            <div class="mb-2 rounded-lg border border-base-300 bg-base-300/40 px-3 py-2">
+              <div class="grid grid-cols-3 gap-3 text-xs">
+                <div>
+                  <div class="text-base-content/50 uppercase tracking-wide">Sessions</div>
+                  <div class="mono text-sm">{{ formatCounterCell(detailSessionCounters.sessions) }}</div>
+                </div>
+                <div>
+                  <div class="text-base-content/50 uppercase tracking-wide">Established</div>
+                  <div class="mono text-sm">{{ formatCounterCell(detailSessionCounters.sessionsEstablished) }}</div>
+                </div>
+                <div>
+                  <div class="text-base-content/50 uppercase tracking-wide">Outstanding</div>
+                  <div class="mono text-sm">{{ formatCounterCell(detailSessionCounters.sessionsOutstanding) }}</div>
+                </div>
+              </div>
+            </div>
             <div v-if="sessionsLoading && !sessions.length" class="bg-base-300 rounded-lg p-3 text-xs text-base-content/50">
               Loading sessions...
             </div>
@@ -896,6 +917,11 @@ export default {
     const sessionsError   = ref("");
     const sessionsRaw     = ref(null);
     const sessionsUpdated = ref("—");
+    const detailSessionCounters = ref({
+      sessions: null,
+      sessionsEstablished: null,
+      sessionsOutstanding: null,
+    });
     const selectedSession = ref(null);
     const sessionInfoData    = ref(null);
     const sessionInfoLoading = ref(false);
@@ -1295,6 +1321,11 @@ export default {
         "sessions_established",
         "established",
       ];
+      const outstandingKeys = [
+        "sessions-outstanding",
+        "sessions_outstanding",
+        "outstanding",
+      ];
 
       const candidates = [
         src,
@@ -1307,13 +1338,15 @@ export default {
 
       let sessions = null;
       let established = null;
+      let outstanding = null;
       for (const candidate of candidates) {
         if (sessions === null) sessions = findFirstCounter(candidate, sessionsKeys);
         if (established === null) established = findFirstCounter(candidate, establishedKeys);
-        if (sessions !== null && established !== null) break;
+        if (outstanding === null) outstanding = findFirstCounter(candidate, outstandingKeys);
+        if (sessions !== null && established !== null && outstanding !== null) break;
       }
 
-      return { sessions, sessionsEstablished: established };
+      return { sessions, sessionsEstablished: established, sessionsOutstanding: outstanding };
     }
 
     async function fetchSessionCounters(instanceName) {
@@ -1322,8 +1355,38 @@ export default {
         const response = await api.post(endpoint, { command: "session-counters", arguments: {} });
         return parseSessionCountersResponse(response);
       } catch {
-        return { sessions: null, sessionsEstablished: null };
+        return { sessions: null, sessionsEstablished: null, sessionsOutstanding: null };
       }
+    }
+
+    function applyDetailSessionCounters(counters) {
+      const next = {
+        sessions: counters?.sessions ?? null,
+        sessionsEstablished: counters?.sessionsEstablished ?? null,
+        sessionsOutstanding: counters?.sessionsOutstanding ?? null,
+      };
+      detailSessionCounters.value = next;
+      if (detailInst.value) {
+        detailInst.value.sessions = next.sessions;
+        detailInst.value.sessionsEstablished = next.sessionsEstablished;
+        detailInst.value.sessionsOutstanding = next.sessionsOutstanding;
+      }
+      if (detailInst.value?.name) {
+        const listInst = instances.value.find(i => i.name === detailInst.value.name);
+        if (listInst) {
+          listInst.sessions = next.sessions;
+          listInst.sessionsEstablished = next.sessionsEstablished;
+          listInst.sessionsOutstanding = next.sessionsOutstanding;
+        }
+      }
+    }
+
+    function resetDetailSessionCounters() {
+      applyDetailSessionCounters({
+        sessions: null,
+        sessionsEstablished: null,
+        sessionsOutstanding: null,
+      });
     }
 
     async function loadAll() {
@@ -1346,6 +1409,7 @@ export default {
             busy: false,
             sessions: null,
             sessionsEstablished: null,
+            sessionsOutstanding: null,
           };
         });
         // Fetch all statuses in parallel and attach per-instance session counters for started rows.
@@ -1362,9 +1426,11 @@ export default {
               const counters = await fetchSessionCounters(name);
               row.sessions = counters.sessions;
               row.sessionsEstablished = counters.sessionsEstablished;
+              row.sessionsOutstanding = counters.sessionsOutstanding;
             } else {
               row.sessions = null;
               row.sessionsEstablished = null;
+              row.sessionsOutstanding = null;
             }
           } catch {
             if (row.status !== "unknown" || row.loading) {
@@ -1373,6 +1439,7 @@ export default {
             }
             row.sessions = null;
             row.sessionsEstablished = null;
+            row.sessionsOutstanding = null;
           }
         }));
         lastUpdated.value = new Date().toLocaleTimeString("en-US");
@@ -1726,6 +1793,7 @@ export default {
       sessionsError.value = "";
       sessionsRaw.value = null;
       sessionsUpdated.value = "—";
+      resetDetailSessionCounters();
       sessionFilter.value = "";
       selectedSession.value = null;
       sessionInfoData.value = null;
@@ -2027,6 +2095,7 @@ export default {
       if (!detailInst.value) return;
       const allowWhenStopped = options.allowWhenStopped === true;
       if (!isStartedLike(detailInst.value.status) && !allowWhenStopped) {
+        resetDetailSessionCounters();
         return;
       }
       sessionsLoading.value = true;
@@ -2075,9 +2144,17 @@ export default {
             ? `Failed to load sessions: ${lastError}`
             : "No session list available (session-info expects a session-id).";
         }
+
+        if (isStartedLike(detailInst.value.status)) {
+          const counters = await fetchSessionCounters(detailInst.value.name);
+          applyDetailSessionCounters(counters);
+        } else {
+          resetDetailSessionCounters();
+        }
       } catch (e) {
         sessionsRaw.value = null;
         sessionsError.value = `Failed to load sessions: ${e.message}`;
+        resetDetailSessionCounters();
       } finally {
         sessionsLoading.value = false;
       }
@@ -2186,6 +2263,7 @@ export default {
       logContent.value = "";
       logError.value = "";
       logUpdated.value = "—";
+      resetDetailSessionCounters();
       detailInst.value = null;
       selectedSession.value = null;
       sessionInfoData.value = null;
@@ -2254,7 +2332,7 @@ export default {
       schedulerEnabled, schedulesLoading, schedules, schedulerExpanded, scheduleForm,
       templates, templateSearchQuery, filteredTemplates, modalRef, startOptionsRef, editing, form, startOptions, startLoggingFlags, startMetricFlags, startReportFlags,
       detailRef, detailInst, cmdName, cmdArgs, cmdResult, downloadFiles,
-      sessionsLoading, sessionsError, sessions, filteredSessions, sessionsUpdated,
+      sessionsLoading, sessionsError, sessions, filteredSessions, sessionsUpdated, detailSessionCounters,
       sessionPage, sessionPageCount, sessionPageStart, sessionPageEnd, pagedSessions, emptySessionRows,
       isDetailStarted,
       selectedSession, sessionInfoData, sessionInfoLoading, sessionActionBusy, sessionAutoOn, sessionIntervalSec,
