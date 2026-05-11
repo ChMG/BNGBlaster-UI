@@ -2130,15 +2130,10 @@ export default {
 
     function sessionActionMeta(row) {
       const status = String(row?.status ?? "").trim().toLowerCase();
-      const isRunningLike =
-        status.includes("established")
-        || status.includes("opened")
-        || status.includes("running")
-        || status.includes("active")
-        || status.includes("up");
-      return isRunningLike
-        ? { command: "session-stop", label: "Stop", kind: "stop" }
-        : { command: "session-start", label: "Start", kind: "start" };
+      const isTerminated = status === "terminated";
+      return isTerminated
+        ? { command: "session-start", label: "Start", kind: "start" }
+        : { command: "session-stop", label: "Stop", kind: "stop" };
     }
 
     async function runSessionAction(row) {

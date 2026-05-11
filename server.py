@@ -1307,6 +1307,22 @@ def _wait_for_status(target: str, name: str, desired: str, attempts: int = 20, d
     return False
 
 
+def _is_started_like_status(status: str | None) -> bool:
+    s = str(status or "").strip().lower()
+    return s in {"started", "running", "active", "up"}
+
+
+def _wait_until_instance_stopped(target: str, name: str, timeout_sec: float = 45.0, delay_sec: float = 0.5) -> bool:
+    """Wait until instance is no longer in a started-like state."""
+    deadline = time.monotonic() + max(1.0, timeout_sec)
+    while time.monotonic() < deadline:
+        status = _backend_instance_status(target, name)
+        if status is not None and not _is_started_like_status(status):
+            return True
+        time.sleep(delay_sec)
+    return False
+
+
 def _get_saved_start_options_for_target(target: str, name: str) -> dict:
     key = f"{target}::{name}"
     with _STATE_LOCK:
@@ -1858,13 +1874,13 @@ def reconfigure_instance(name: str):
         return jsonify({"error": "instance status unavailable"}), 502
 
     # Stop first if running.
-    if status == "started":
+    if _is_started_like_status(status):
         r_stop = _backend_request(target, "POST", f"/api/v1/instances/{name}/_stop")
         if r_stop is None or not r_stop.ok:
             msg = r_stop.text if r_stop is not None else "backend not reachable"
             code = r_stop.status_code if r_stop is not None else 502
             return jsonify({"error": f"stop failed: {msg}"}), code
-        if not _wait_for_status(target, name, "stopped"):
+        if not _wait_until_instance_stopped(target, name, timeout_sec=45.0, delay_sec=0.5):
             return jsonify({"error": "timeout waiting for instance to stop"}), 504
 
     # Apply new config.
